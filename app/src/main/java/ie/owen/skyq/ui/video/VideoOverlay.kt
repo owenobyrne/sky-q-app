@@ -38,10 +38,16 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import ie.owen.skyq.data.api.TvHeadendClient
+import ie.owen.skyq.data.htsp.TimeshiftState
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,6 +73,8 @@ fun VideoOverlay(
     isFullscreen: Boolean,
     previewBounds: Rect,
     meta: ChannelMeta?,
+    timeshiftState: TimeshiftState = TimeshiftState(),
+    onTogglePause: () -> Unit = {},
     onBack: () -> Unit
 ) {
     val config  = LocalConfiguration.current
@@ -113,6 +121,11 @@ fun VideoOverlay(
     }
     val isLoading = playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_IDLE
 
+    // Sync ExoPlayer paused state with HTSP controller
+    LaunchedEffect(timeshiftState.isPaused) {
+        if (timeshiftState.isPaused) player.pause() else player.play()
+    }
+
     var osdVisible by remember { mutableStateOf(false) }
     LaunchedEffect(isFullscreen) {
         if (isFullscreen) {
@@ -123,6 +136,10 @@ fun VideoOverlay(
         } else {
             osdVisible = false
         }
+    }
+    // Keep OSD visible while paused
+    LaunchedEffect(timeshiftState.isPaused) {
+        if (timeshiftState.isPaused) osdVisible = true
     }
 
     val hMargin    = (config.screenWidthDp  * 0.10f).dp
@@ -189,11 +206,23 @@ fun VideoOverlay(
                 exit  = fadeOut(tween(600)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(osdHeight)
                     .align(Alignment.BottomCenter)
                     .padding(start = hMargin, end = hMargin, bottom = osdVMargin)
+                    .onKeyEvent { ev ->
+                        // OK / centre D-pad toggles pause while OSD is showing
+                        if (ev.type == KeyEventType.KeyDown && ev.key == Key.DirectionCenter) {
+                            onTogglePause(); true
+                        } else false
+                    }
             ) {
-                ChannelOsd(meta)
+                Column {
+                    Box(Modifier.fillMaxWidth().height(osdHeight)) { ChannelOsd(meta) }
+                    Spacer(Modifier.height(8.dp))
+                    TimeshiftBar(
+                        state = timeshiftState,
+                        onTogglePause = onTogglePause
+                    )
+                }
             }
         }
     }
@@ -321,6 +350,82 @@ private fun ChannelOsd(meta: ChannelMeta) {
                     fontWeight = FontWeight.Light
                 )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun TimeshiftBar(
+    state: TimeshiftState,
+    onTogglePause: () -> Unit
+) {
+    val behindSec = state.timeBehindLiveSec
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(OsdBackground, OsdShape)
+            .border(1.5.dp, OsdBorder, OsdShape)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Pause / play indicator — tappable on TV remote via key event on parent
+        Text(
+            text = if (state.isPaused) "⏸" else "▶",
+            color = Color.White,
+            fontSize = 18.sp,
+            modifier = Modifier.padding(end = 16.dp)
+        )
+
+        if (behindSec > 0) {
+            // Time-behind-live label
+            val mins = behindSec / 60
+            val secs = behindSec % 60
+            Text(
+                text = "-%02d:%02d".format(mins, secs),
+                color = Color.White.copy(alpha = 0.80f),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Light,
+                modifier = Modifier.padding(end = 16.dp)
+            )
+
+            // Progress bar: position within timeshift buffer (rough — based on time only)
+            val maxBuf = 7200f   // 2-hour buffer configured in HtspDataSource
+            val progress = (1f - (behindSec / maxBuf).toFloat()).coerceIn(0f, 1f)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White.copy(alpha = 0.20f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(progress)
+                        .background(Color.White.copy(alpha = 0.70f))
+                )
+            }
+            Spacer(Modifier.width(16.dp))
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
+
+        // LIVE badge
+        Box(
+            modifier = Modifier
+                .background(
+                    if (state.isAtLive) Color(0xFFCC0000) else Color.White.copy(alpha = 0.15f),
+                    RoundedCornerShape(4.dp)
+                )
+                .padding(horizontal = 8.dp, vertical = 3.dp)
+        ) {
+            Text(
+                text = "● LIVE",
+                color = if (state.isAtLive) Color.White else Color.White.copy(alpha = 0.50f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

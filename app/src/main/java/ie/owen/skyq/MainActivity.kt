@@ -20,6 +20,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ie.owen.skyq.navigation.NavItem
 import ie.owen.skyq.ui.guide.TvGuideScreen
@@ -46,9 +47,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun SkyQApp() {
     val videoViewModel: VideoViewModel = viewModel()
+    val timeshiftState by videoViewModel.timeshiftController.state.collectAsStateWithLifecycle()
     var selectedNav     by remember { mutableStateOf(NavItem.GUIDE) }
     var previewBounds   by remember { mutableStateOf(Rect.Zero) }
     var isFullscreen    by remember { mutableStateOf(false) }
@@ -90,11 +93,13 @@ private fun SkyQApp() {
 
         if (previewBounds.width > 0f) {
             VideoOverlay(
-                player        = videoViewModel.player,
-                isFullscreen  = isFullscreen,
-                previewBounds = previewBounds,
-                meta          = if (isFullscreen) fullscreenMeta else null,
-                onBack        = { isFullscreen = false }
+                player          = videoViewModel.player,
+                isFullscreen    = isFullscreen,
+                previewBounds   = previewBounds,
+                meta            = if (isFullscreen) fullscreenMeta else null,
+                timeshiftState  = timeshiftState,
+                onTogglePause   = { videoViewModel.togglePause() },
+                onBack          = { isFullscreen = false }
             )
 
             if (borderAlpha > 0f) {

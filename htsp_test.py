@@ -20,6 +20,7 @@ PASS = "emby"
 OUT  = "/tmp/test_htsp.ts"
 SECS = 10
 VER  = 35          # HTSP version to negotiate
+PROFILE = "mp2-audio-to-aac-lc"   # server-side transcode profile; None for raw passthrough
 
 # ── HMF codec ────────────────────────────────────────────────────────────────
 
@@ -346,14 +347,18 @@ def main():
     print(f"Subscribing to channel {cid}: {cname}")
 
     sub_id = 99
-    resp = c.rpc({
+    sub_msg = {
         "method": "subscribe",
         "subscriptionId": sub_id,
         "channelId": cid,
         "90khz": 1,
         "weight": 150,
         "queueDepth": 5_000_000,
-    })
+    }
+    if PROFILE:
+        sub_msg["profile"] = PROFILE
+    print(f"Profile: {PROFILE or '(raw passthrough)'}")
+    resp = c.rpc(sub_msg)
     print(f"Subscribe: {list(resp.keys())}  noaccess={resp.get('noaccess', 0)}")
 
     # Receive and mux

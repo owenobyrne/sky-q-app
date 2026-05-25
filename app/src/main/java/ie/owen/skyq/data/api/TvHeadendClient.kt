@@ -37,6 +37,10 @@ object TvHeadendClient {
     fun buildStreamUrl(channelUuid: String) =
         "${BASE_URL}stream/channel/$channelUuid?profile=mp2-audio-to-aac-lc"
 
+    // HLS entry playlist. hls-transcode = H.264 (High) + AAC-LC, widest device support.
+    fun buildHlsUrl(channelUuid: String) =
+        "${BASE_URL}hls/channel/$channelUuid.m3u8?profile=hls-transcode"
+
     fun resolveUrl(path: String): String =
         if (path.startsWith("http")) path else "$BASE_URL$path"
 

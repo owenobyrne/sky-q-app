@@ -8,14 +8,21 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.DefaultExtractorsFactory
+import ie.owen.skyq.data.api.TvHeadendClient
 import ie.owen.skyq.data.htsp.*
+import ie.owen.skyq.data.settings.AppSettings
+import ie.owen.skyq.data.settings.StreamingMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.CompletableDeferred
@@ -39,11 +46,13 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
     /** Exposed so the UI can read isPaused / timeBehindLiveSec. */
     val timeshiftController: HtspController get() = htspFactory.controller
 
-    val player: ExoPlayer = ExoPlayer.Builder(application)
-        .setMediaSourceFactory(
-            ProgressiveMediaSource.Factory(htspFactory, DefaultExtractorsFactory())
-        )
-        .build()
+    private val htspSourceFactory =
+        ProgressiveMediaSource.Factory(htspFactory, DefaultExtractorsFactory())
+    private val hlsSourceFactory =
+        HlsMediaSource.Factory(OkHttpDataSource.Factory(TvHeadendClient.authenticatedOkHttpClient()))
+
+    // MediaSource is built per-tune (HTSP vs HLS), so no fixed factory on the player.
+    val player: ExoPlayer = ExoPlayer.Builder(application).build()
 
     // UUID of the channel currently loaded (to avoid redundant restarts)
     private var activeUuid: String? = null
@@ -57,6 +66,16 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
             }
         })
         loadChannelIds()
+
+        // Re-tune the current channel when the streaming mode changes (drop the
+        // initial value — nothing is playing yet at construction).
+        viewModelScope.launch {
+            AppSettings.streamingMode.drop(1).collect {
+                val uuid = activeUuid ?: return@collect
+                activeUuid = null
+                setChannel(uuid)
+            }
+        }
     }
 
     // ── Channel ID pre-fetch ──────────────────────────────────────────────────
@@ -119,21 +138,37 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         channelJob?.cancel()
         channelJob = viewModelScope.launch {
             delay(PREVIEW_DEBOUNCE_MS)
-            // Channel-ID map is fetched async at startup; wait briefly if not ready.
-            val id = channelIdMap[uuid] ?: withTimeoutOrNull(1_500) {
-                while (channelIdMap[uuid] == null) delay(100)
-                channelIdMap[uuid]
+            val source = when (AppSettings.streamingMode.value) {
+                StreamingMode.HLS -> hlsSource(uuid)
+                StreamingMode.HTSP -> htspSource(uuid) ?: run {
+                    Log.w(TAG, "no HTSP ID for uuid=$uuid"); pendingUuid = null; return@launch
+                }
             }
-            if (id == null) { Log.w(TAG, "no HTSP ID for uuid=$uuid"); pendingUuid = null; return@launch }
             activeUuid = uuid
             pendingUuid = null
-            startStream(id)
+            startStream(source)
         }
     }
 
-    private fun startStream(channelId: Long) {
+    /** Resolves the numeric HTSP channel ID (waiting briefly for the async map). */
+    private suspend fun htspSource(uuid: String): MediaSource? {
+        val id = channelIdMap[uuid] ?: withTimeoutOrNull(1_500) {
+            while (channelIdMap[uuid] == null) delay(100)
+            channelIdMap[uuid]
+        } ?: return null
+        return htspSourceFactory.createMediaSource(
+            MediaItem.fromUri(HtspDataSource.channelUri(id))
+        )
+    }
+
+    private fun hlsSource(uuid: String): MediaSource =
+        hlsSourceFactory.createMediaSource(
+            MediaItem.fromUri(TvHeadendClient.buildHlsUrl(uuid))
+        )
+
+    private fun startStream(source: MediaSource) {
         player.stop()
-        player.setMediaItem(MediaItem.fromUri(HtspDataSource.channelUri(channelId)))
+        player.setMediaSource(source)
         player.prepare()
         player.playWhenReady = true
     }

@@ -5,4 +5,5 @@ enum class NavItem(val label: String, val route: String) {
     GUIDE("TV guide", "guide"),
     RECORDINGS("Recordings", "recordings"),
     CATCHUP("Catch up TV", "catchup"),
+    SETTINGS("Settings", "settings"),
 }

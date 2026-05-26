@@ -140,6 +140,7 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
             delay(PREVIEW_DEBOUNCE_MS)
             val source = when (AppSettings.streamingMode.value) {
                 StreamingMode.HLS -> hlsSource(uuid)
+                StreamingMode.HLS_LL -> hlsLlSource(uuid)
                 StreamingMode.HTSP -> htspSource(uuid) ?: run {
                     Log.w(TAG, "no HTSP ID for uuid=$uuid"); pendingUuid = null; return@launch
                 }
@@ -164,6 +165,11 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
     private fun hlsSource(uuid: String): MediaSource =
         hlsSourceFactory.createMediaSource(
             MediaItem.fromUri(TvHeadendClient.buildHlsUrl(uuid))
+        )
+
+    private fun hlsLlSource(uuid: String): MediaSource =
+        hlsSourceFactory.createMediaSource(
+            MediaItem.fromUri(TvHeadendClient.buildHlsLlUrl(uuid))
         )
 
     private fun startStream(source: MediaSource) {

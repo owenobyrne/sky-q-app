@@ -8,7 +8,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class StreamingMode(val label: String, val description: String) {
     HTSP("HTSP", "Direct HTSP subscription. Fastest channel changes; live edge only."),
-    HLS("HLS", "HTTP Live Streaming with server-side DVR buffer. Pause and rewind.")
+    HLS("HLS", "HTTP Live Streaming with server-side DVR buffer. Pause and rewind."),
+    HLS_LL("LL-HLS", "Low-Latency HLS. Sub-second live edge with DVR buffer support.")
 }
 
 /**

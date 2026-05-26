@@ -41,6 +41,9 @@ object TvHeadendClient {
     fun buildHlsUrl(channelUuid: String) =
         "${BASE_URL}hls/channel/$channelUuid.m3u8?profile=hls-transcode"
 
+    fun buildHlsLlUrl(channelUuid: String) =
+        "${BASE_URL}hls/channel/$channelUuid.m3u8?profile=hls-ll"
+
     fun resolveUrl(path: String): String =
         if (path.startsWith("http")) path else "$BASE_URL$path"
 

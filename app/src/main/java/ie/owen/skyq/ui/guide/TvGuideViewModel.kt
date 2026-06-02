@@ -45,7 +45,8 @@ class TvGuideViewModel : ViewModel() {
             try {
                 repository.getGuideDataFlow(windowStart, windowEnd).collect { data ->
                     if (_focusedEvent.value == null) {
-                        _focusedEvent.value = data.channels.firstOrNull()?.let { ch ->
+                        val startCh = data.channels.firstOrNull()
+                        _focusedEvent.value = startCh?.let { ch ->
                             data.eventsByChannel[ch.uuid]?.firstOrNull { it.isLive }
                                 ?: data.eventsByChannel[ch.uuid]?.firstOrNull()
                         }

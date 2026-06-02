@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -52,7 +53,9 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         HlsMediaSource.Factory(OkHttpDataSource.Factory(TvHeadendClient.authenticatedOkHttpClient()))
 
     // MediaSource is built per-tune (HTSP vs HLS), so no fixed factory on the player.
-    val player: ExoPlayer = ExoPlayer.Builder(application).build()
+    // AmlogicRenderersFactory works around the present-fence bug on the Chromecast HD —
+    // see AmlogicVideoRenderer for details.
+    val player: ExoPlayer = ExoPlayer.Builder(application, AmlogicRenderersFactory(application)).build()
 
     // UUID of the channel currently loaded (to avoid redundant restarts)
     private var activeUuid: String? = null
@@ -169,11 +172,22 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun hlsLlSource(uuid: String): MediaSource =
         hlsSourceFactory.createMediaSource(
-            MediaItem.fromUri(TvHeadendClient.buildHlsLlUrl(uuid))
+            MediaItem.Builder()
+                .setUri(TvHeadendClient.buildHlsLlUrl(uuid))
+                // Play 3 s behind live so parts are already available when requested,
+                // avoiding blocking playlist requests at the live edge that cause
+                // download bursts and decoder output-pool saturation.
+                .setLiveConfiguration(
+                    MediaItem.LiveConfiguration.Builder()
+                        .setTargetOffsetMs(3_000)
+                        .setMaxOffsetMs(8_000)
+                        .setMinOffsetMs(1_000)
+                        .build()
+                )
+                .build()
         )
 
     private fun startStream(source: MediaSource) {
-        player.stop()
         player.setMediaSource(source)
         player.prepare()
         player.playWhenReady = true

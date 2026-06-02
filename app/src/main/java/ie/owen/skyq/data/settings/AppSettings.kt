@@ -24,7 +24,7 @@ object AppSettings {
 
     private var prefs: SharedPreferences? = null
 
-    private val _streamingMode = MutableStateFlow(StreamingMode.HTSP)
+    private val _streamingMode = MutableStateFlow(StreamingMode.HLS_LL)
     val streamingMode: StateFlow<StreamingMode> = _streamingMode.asStateFlow()
 
     fun init(context: Context) {
@@ -32,7 +32,7 @@ object AppSettings {
         prefs = p
         val stored = p.getString(KEY_STREAMING_MODE, null)
         _streamingMode.value = stored?.let { runCatching { StreamingMode.valueOf(it) }.getOrNull() }
-            ?: StreamingMode.HTSP
+            ?: StreamingMode.HLS_LL
     }
 
     fun setStreamingMode(mode: StreamingMode) {

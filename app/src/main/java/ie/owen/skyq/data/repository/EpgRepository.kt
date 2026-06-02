@@ -40,13 +40,19 @@ class EpgRepository {
             return@flow
         }
 
-        // Load channels and first EPG chunk concurrently
+        // Load channels, encrypted-service UUIDs, and first EPG chunk concurrently
         val (channels, firstChunk) = coroutineScope {
             val channelsDeferred = async {
                 val t = System.currentTimeMillis()
+                val encryptedUuids = runCatching {
+                    api.getEncryptedServices().entries
+                        .flatMap { it.channel }
+                        .toSet()
+                }.getOrDefault(emptySet())
                 api.getChannels().entries
+                    .filter { it.uuid !in encryptedUuids }
                     .sortedBy { it.number }
-                    .also { Log.d(TAG, "+${System.currentTimeMillis() - t}ms  channels: ${it.size}") }
+                    .also { Log.d(TAG, "+${System.currentTimeMillis() - t}ms  channels: ${it.size} (${encryptedUuids.size} encrypted filtered)") }
             }
             val epgDeferred = async {
                 val t = System.currentTimeMillis()

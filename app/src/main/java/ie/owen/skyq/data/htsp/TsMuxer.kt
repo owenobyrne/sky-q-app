@@ -9,12 +9,19 @@ private const val PID_VIDEO = 0x0101
 private const val PID_AUDIO = 0x0102
 
 // MPEG-TS stream type bytes
+private const val ST_MPEG2 = 0x02
 private const val ST_H264  = 0x1B
 private const val ST_HEVC  = 0x24
 private const val ST_AAC   = 0x0F   // ADTS
 private const val ST_MP2   = 0x04
 private const val ST_AC3   = 0x81
 private const val ST_EAC3  = 0x87
+
+// Lip-sync: advance audio PTS to compensate the AAC encode/decode priming delay
+// (~2048 samples @ 48 kHz) that a raw TS/ADTS stream can't signal the way MP4
+// edit lists do. Without it, transcoded audio lags the video by a frame or two.
+// 90 kHz units. Tune here if audio drifts ahead/behind.
+private const val AUDIO_PTS_ADVANCE_90K = 3_840L   // 2048/48000 * 90000
 
 /**
  * Minimal MPEG-TS muxer that bridges raw HTSP codec frames to a byte stream
@@ -39,45 +46,60 @@ class TsMuxer(private val out: OutputStream) {
     private val streams = mutableMapOf<Int, StreamInfo>()  // htsp stream index → info
     private val cc      = mutableMapOf<Int, Int>()          // pid → continuity counter
     private var patPmtWritten = false
+    // Hold off writing any TS data until the first video IDR. This ensures ExoPlayer
+    // always sees a clean SPS/PPS+IDR start and never needs to reconfigure the codec
+    // mid-stream — which on the Amlogic decoder races with old-codec teardown and
+    // causes the "audio works, video frozen" failure.
+    private var waitingForKeyframe = true
 
     @Volatile var livePts:    Long = Long.MIN_VALUE
     @Volatile var currentPts: Long = Long.MIN_VALUE
 
     fun init(htspStreams: List<HtspMsg>): Boolean {
         streams.clear(); cc.clear(); patPmtWritten = false
-        var videoTaken = false; var audioTaken = false
+
+        // Video: first H264/HEVC/MPEG2 stream wins.
         for (s in htspStreams) {
             val idx  = s.int("index") ?: continue
             val type = s.str("type")?.uppercase() ?: continue
             when (type) {
-                "H264" -> if (!videoTaken) {
-                    streams[idx] = StreamInfo(idx, PID_VIDEO, ST_H264, true); videoTaken = true
-                }
-                "HEVC", "H265" -> if (!videoTaken) {
-                    streams[idx] = StreamInfo(idx, PID_VIDEO, ST_HEVC, true); videoTaken = true
-                }
-                "AAC" -> if (!audioTaken) {
-                    val (p, sr, ch) = parseAacConfig(s.bytes("meta"))
-                    streams[idx] = StreamInfo(idx, PID_AUDIO, ST_AAC, false, p, sr, ch)
-                    audioTaken = true
-                }
-                "MP2", "MPEG2AUDIO" -> if (!audioTaken) {
-                    streams[idx] = StreamInfo(idx, PID_AUDIO, ST_MP2, false); audioTaken = true
-                }
-                "AC3" -> if (!audioTaken) {
-                    streams[idx] = StreamInfo(idx, PID_AUDIO, ST_AC3, false); audioTaken = true
-                }
-                "EAC3" -> if (!audioTaken) {
-                    streams[idx] = StreamInfo(idx, PID_AUDIO, ST_EAC3, false); audioTaken = true
-                }
+                "MPEG2VIDEO", "MPEG2" -> { streams[idx] = StreamInfo(idx, PID_VIDEO, ST_MPEG2, true); break }
+                "H264"                -> { streams[idx] = StreamInfo(idx, PID_VIDEO, ST_H264,  true); break }
+                "HEVC", "H265"        -> { streams[idx] = StreamInfo(idx, PID_VIDEO, ST_HEVC,  true); break }
             }
         }
+
+        // Audio: prefer non-AD tracks (DVB audio_type 3 = visually impaired / audio description).
+        // Two passes: first try audio_type != 3, fall back to any audio stream.
+        val audioTypes = setOf("AAC", "MP2", "MPEG2AUDIO", "AC3", "EAC3")
+        val audioStreams = htspStreams.filter { it.str("type")?.uppercase() in audioTypes }
+        // audio_type 3 = DVB "visually impaired" (AD); "NAR" language tag is the same thing
+        val chosen = audioStreams.firstOrNull {
+            (it.int("audio_type") ?: 0) != 3 && it.str("language")?.uppercase() != "NAR"
+        } ?: audioStreams.firstOrNull()
+        if (chosen != null) {
+            val idx  = chosen.int("index")!!
+            when (chosen.str("type")!!.uppercase()) {
+                "AAC" -> {
+                    val (p, sr, ch) = parseAacConfig(chosen.bytes("meta"))
+                    streams[idx] = StreamInfo(idx, PID_AUDIO, ST_AAC, false, p, sr, ch)
+                }
+                "MP2", "MPEG2AUDIO" -> streams[idx] = StreamInfo(idx, PID_AUDIO, ST_MP2,  false)
+                "AC3"               -> streams[idx] = StreamInfo(idx, PID_AUDIO, ST_AC3,  false)
+                "EAC3"              -> streams[idx] = StreamInfo(idx, PID_AUDIO, ST_EAC3, false)
+            }
+        }
+
         for (pid in listOf(PID_PAT, PID_PMT, PID_VIDEO, PID_AUDIO)) cc[pid] = 0
+        waitingForKeyframe = true
         return streams.isNotEmpty()
     }
 
     fun mux(streamIndex: Int, pts: Long, dts: Long, payload: ByteArray, isKey: Boolean) {
         val info = streams[streamIndex] ?: return
+        if (waitingForKeyframe && info.isVideo) {
+            if (isKey) waitingForKeyframe = false else return
+        }
         if (pts > livePts) livePts = pts
         currentPts = pts
 
@@ -85,8 +107,12 @@ class TsMuxer(private val out: OutputStream) {
             writePat(); writePmt(); patPmtWritten = true
         }
 
+        // Advance audio to compensate the AAC priming delay (see AUDIO_PTS_ADVANCE_90K).
+        val outPts = if (info.isVideo) pts else pts - AUDIO_PTS_ADVANCE_90K
+        val outDts = if (info.isVideo) dts else dts - AUDIO_PTS_ADVANCE_90K
+
         val data = if (info.streamType == ST_AAC && !hasAdtsHeader(payload)) adtsWrap(info, payload) else payload
-        writePes(info, pts, dts, data, isKey)
+        writePes(info, outPts, outDts, data, isKey)
     }
 
     // ── PAT ─────────────────────────────────────────────────────────────────

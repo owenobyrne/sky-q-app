@@ -175,6 +175,11 @@ class HtspDataSource private constructor(
                                 return@collect   // pipe was closed
                             }
                         }
+                        "subscriptionStatus" -> {
+                            val status = msg.str("status")
+                            val errors = msg.int("errors") ?: 0
+                            Log.w(TAG, "subscriptionStatus status=$status errors=$errors")
+                        }
                         "subscriptionStop" -> {
                             Log.i(TAG, "subscriptionStop received")
                             pipeOut.close()

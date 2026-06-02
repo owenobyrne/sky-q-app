@@ -23,7 +23,7 @@ tasks.named("preBuild") {
 
 android {
     namespace = "ie.owen.skyq"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "ie.owen.skyq"
@@ -79,10 +79,10 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     // Media3 / ExoPlayer
-    implementation("androidx.media3:media3-exoplayer:1.3.1")
-    implementation("androidx.media3:media3-exoplayer-hls:1.3.1")
-    implementation("androidx.media3:media3-datasource-okhttp:1.3.1")
-    implementation("androidx.media3:media3-ui:1.3.1")
+    implementation("androidx.media3:media3-exoplayer:1.10.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.10.1")
+    implementation("androidx.media3:media3-datasource-okhttp:1.10.1")
+    implementation("androidx.media3:media3-ui:1.10.1")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

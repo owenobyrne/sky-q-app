@@ -21,7 +21,7 @@ data class GuideData(
 
 class EpgRepository {
 
-    private val api = TvHeadendClient.api
+    private val api get() = TvHeadendClient.api
 
     private var cachedChannels: List<Channel>? = null
     private var cachedEvents: List<EpgEvent>? = null

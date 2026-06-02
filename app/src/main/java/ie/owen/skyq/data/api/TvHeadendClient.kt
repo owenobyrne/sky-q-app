@@ -1,5 +1,6 @@
 package ie.owen.skyq.data.api
 
+import ie.owen.skyq.data.settings.AppSettings
 import okhttp3.Authenticator
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -14,40 +15,62 @@ import java.util.concurrent.TimeUnit
 
 object TvHeadendClient {
 
-    const val BASE_URL = "http://192.168.1.7:9981/"
-    private const val USERNAME = "emby"
-    private const val PASSWORD = "emby"
+    val baseUrl: String
+        get() = "http://${AppSettings.serverHost}:${AppSettings.serverPort}/"
 
-    private val okHttpClient = OkHttpClient.Builder()
-        .authenticator(DigestAuthenticator(USERNAME, PASSWORD))
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        })
-        .build()
+    @Volatile private var _okHttpClient: OkHttpClient? = null
+    @Volatile private var _api: TvHeadendApi? = null
 
-    val api: TvHeadendApi = Retrofit.Builder()
-        .baseUrl(BASE_URL)
-        .client(okHttpClient)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
-        .create(TvHeadendApi::class.java)
+    // Snapshot of config used to build the current instances; detect staleness
+    private var builtHost = ""; private var builtPort = -1
+    private var builtUser = ""; private var builtPass = ""
+
+    private fun isStale() = AppSettings.serverHost != builtHost
+            || AppSettings.serverPort != builtPort
+            || AppSettings.username   != builtUser
+            || AppSettings.password   != builtPass
+
+    @Synchronized
+    private fun ensureBuilt() {
+        if (_okHttpClient != null && !isStale()) return
+        builtHost = AppSettings.serverHost
+        builtPort = AppSettings.serverPort
+        builtUser = AppSettings.username
+        builtPass = AppSettings.password
+
+        val url = if (builtHost.isBlank()) "http://localhost:9981/" else baseUrl
+        val client = OkHttpClient.Builder()
+            .authenticator(DigestAuthenticator(builtUser, builtPass))
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+            })
+            .build()
+        _okHttpClient = client
+        _api = Retrofit.Builder()
+            .baseUrl(url)
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(TvHeadendApi::class.java)
+    }
+
+    val api: TvHeadendApi get() { ensureBuilt(); return _api!! }
+
+    fun authenticatedOkHttpClient(): OkHttpClient { ensureBuilt(); return _okHttpClient!! }
 
     fun buildStreamUrl(channelUuid: String) =
-        "${BASE_URL}stream/channel/$channelUuid?profile=mp2-audio-to-aac-lc"
+        "${baseUrl}stream/channel/$channelUuid?profile=mp2-audio-to-aac-lc"
 
-    // HLS entry playlist. hls-transcode = H.264 (High) + AAC-LC, widest device support.
     fun buildHlsUrl(channelUuid: String) =
-        "${BASE_URL}hls/channel/$channelUuid.m3u8?profile=hls-transcode"
+        "${baseUrl}hls/channel/$channelUuid.m3u8?profile=hls-transcode"
 
     fun buildHlsLlUrl(channelUuid: String) =
-        "${BASE_URL}hls/channel/$channelUuid.m3u8?profile=hls-ll"
+        "${baseUrl}hls/channel/$channelUuid.m3u8?profile=hls-ll"
 
     fun resolveUrl(path: String): String =
-        if (path.startsWith("http")) path else "$BASE_URL$path"
-
-    fun authenticatedOkHttpClient() = okHttpClient
+        if (path.startsWith("http")) path else "$baseUrl$path"
 }
 
 private class DigestAuthenticator(
@@ -63,13 +86,13 @@ private class DigestAuthenticator(
         if (!wwwAuth.startsWith("Digest", ignoreCase = true)) return null
 
         val params = parseParams(wwwAuth)
-        val realm = params["realm"] ?: return null
-        val nonce = params["nonce"] ?: return null
+        val realm  = params["realm"] ?: return null
+        val nonce  = params["nonce"] ?: return null
         val opaque = params["opaque"]
-        val qop = params["qop"]
+        val qop    = params["qop"]
 
         nonceCount++
-        val nc = "%08x".format(nonceCount)
+        val nc     = "%08x".format(nonceCount)
         val cnonce = UUID.randomUUID().toString().replace("-", "").take(16)
 
         val uri = response.request.url.encodedPath.let { path ->

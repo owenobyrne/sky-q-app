@@ -29,12 +29,8 @@ import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
-private const val TAG      = "VideoVM"
+private const val TAG                 = "VideoVM"
 private const val PREVIEW_DEBOUNCE_MS = 400L
-private const val HTSP_HOST = "192.168.1.7"
-private const val HTSP_PORT = 9982
-private const val USERNAME  = "emby"
-private const val PASSWORD  = "emby"
 
 @UnstableApi
 class VideoViewModel(application: Application) : AndroidViewModel(application) {
@@ -42,7 +38,14 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
     // Channel ID lookup: uuid (HTTP API) → numeric HTSP channel ID
     private val channelIdMap = mutableMapOf<String, Long>()
 
-    private val htspFactory = HtspDataSource.Factory(HTSP_HOST, HTSP_PORT, USERNAME, PASSWORD)
+    // Recreated lazily each access so settings changes take effect on next channel switch
+    private val htspFactory: HtspDataSource.Factory
+        get() = HtspDataSource.Factory(
+            AppSettings.serverHost,
+            AppSettings.serverPort + 1,   // HTSP is always HTTP port + 1
+            AppSettings.username,
+            AppSettings.password
+        )
 
     /** Exposed so the UI can read isPaused / timeBehindLiveSec. */
     val timeshiftController: HtspController get() = htspFactory.controller
@@ -85,7 +88,7 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadChannelIds() {
         viewModelScope.launch(Dispatchers.IO) {
-            val conn = HtspConnection(HTSP_HOST, HTSP_PORT, USERNAME, PASSWORD)
+            val conn = HtspConnection(AppSettings.serverHost, AppSettings.serverPort + 1, AppSettings.username, AppSettings.password)
             try {
                 if (!conn.connect()) { Log.w(TAG, "channel-ID fetch: connect failed"); return@launch }
 

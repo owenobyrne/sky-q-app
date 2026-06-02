@@ -21,7 +21,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.viewmodel.compose.viewModel
-import ie.owen.skyq.data.settings.AppSettings
 import ie.owen.skyq.navigation.NavItem
 import ie.owen.skyq.ui.guide.TvGuideScreen
 import ie.owen.skyq.ui.home.HomeScreen
@@ -40,7 +39,6 @@ private val DPAD_KEYS = setOf(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AppSettings.init(this)
         setContent {
             SkyQTheme {
                 SkyQApp()

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -21,8 +22,10 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.viewmodel.compose.viewModel
-import ie.owen.skyq.navigation.NavItem
+import ie.owen.skyq.data.settings.AppSettings
+import ie.owen.skyq.navigation.NavDestination
 import ie.owen.skyq.ui.guide.TvGuideScreen
+import ie.owen.skyq.ui.guide.TvGuideViewModel
 import ie.owen.skyq.ui.home.HomeScreen
 import ie.owen.skyq.ui.settings.SettingsScreen
 import ie.owen.skyq.ui.shell.AppShell
@@ -51,10 +54,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun SkyQApp() {
     val videoViewModel: VideoViewModel = viewModel()
-    var selectedNav     by remember { mutableStateOf(NavItem.GUIDE) }
+    val guideViewModel: TvGuideViewModel = viewModel()
+    var selectedNav     by remember { mutableStateOf<NavDestination>(NavDestination.Guide) }
     var previewBounds   by remember { mutableStateOf(Rect.Zero) }
     var isFullscreen    by remember { mutableStateOf(false) }
     var fullscreenMeta  by remember { mutableStateOf<ChannelMeta?>(null) }
+    val guideState      by guideViewModel.state.collectAsStateWithLifecycle()
 
     val density = LocalDensity.current
     val borderAlpha by animateFloatAsState(
@@ -62,6 +67,11 @@ private fun SkyQApp() {
         animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing),
         label = "borderAlpha"
     )
+
+    // Auto-tune to the last channel on startup (starts the sidebar preview).
+    LaunchedEffect(Unit) {
+        AppSettings.lastChannelUuid?.let { videoViewModel.setChannel(it) }
+    }
 
     Box(Modifier.fillMaxSize().onPreviewKeyEvent { keyEvent ->
         // While fullscreen, eat all D-pad navigation so the EPG behind can't receive
@@ -71,13 +81,24 @@ private fun SkyQApp() {
     }) {
         AppShell(
             selectedNav = selectedNav,
-            onNavSelect = { selectedNav = it },
+            onNavSelect = { dest ->
+                selectedNav = dest
+                when (dest) {
+                    is NavDestination.Tag   -> guideViewModel.setTagFilter(dest.uuid)
+                    is NavDestination.Guide -> guideViewModel.setTagFilter(null)
+                    else                    -> Unit
+                }
+            },
+            tags = guideState.tags,
             onPreviewBoundsChanged = { previewBounds = it },
             isFullscreen = isFullscreen
         ) {
-            when (selectedNav) {
-                NavItem.GUIDE -> TvGuideScreen(
+            when (val nav = selectedNav) {
+                is NavDestination.Guide,
+                is NavDestination.Tag -> TvGuideScreen(
+                    viewModel = guideViewModel,
                     onChannelSelected = { uuid, name, number, title, iconPath, startTime, stopTime, description ->
+                        AppSettings.setLastChannel(uuid)
                         videoViewModel.setChannel(uuid)
                         fullscreenMeta = ChannelMeta(name, number, title, iconPath, startTime, stopTime, description)
                         isFullscreen = true
@@ -86,7 +107,7 @@ private fun SkyQApp() {
                         videoViewModel.setChannel(uuid)
                     }
                 )
-                NavItem.SETTINGS -> SettingsScreen()
+                is NavDestination.Settings -> SettingsScreen()
                 else -> HomeScreen()
             }
         }

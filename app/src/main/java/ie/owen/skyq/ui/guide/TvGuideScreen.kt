@@ -19,7 +19,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
@@ -37,7 +36,7 @@ private val dropShadow = TextStyle(
 fun TvGuideScreen(
     onChannelSelected: (uuid: String, name: String, number: String, title: String, iconPath: String, startTime: Long?, stopTime: Long?, description: String?) -> Unit,
     onPreviewChannelChanged: (channelUuid: String) -> Unit = {},
-    viewModel: TvGuideViewModel = viewModel()
+    viewModel: TvGuideViewModel
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val focusedEvent by viewModel.focusedEvent.collectAsStateWithLifecycle()
@@ -60,7 +59,7 @@ fun TvGuideScreen(
                     latestOnChannelSelected(
                         event.channelUuid, event.channelName, event.channelNumber,
                         event.title, event.channelIcon ?: "",
-                        event.start, event.stop, event.description
+                        event.start, event.stop, event.description ?: event.summary ?: event.subtitle
                     )
                 } else {
                     pendingChannelUuid.value = event.channelUuid
@@ -109,6 +108,7 @@ fun TvGuideScreen(
                     onEventFocused = onEventFocused,
                     onEventSelected = onEventSelected,
                     onChannelSelected = onChannelDirectSelected,
+                    initialChannelUuid = viewModel.initialChannelUuid,
                     modifier = Modifier.weight(0.62f)
                 )
             }

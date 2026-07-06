@@ -10,6 +10,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.*
@@ -81,6 +82,7 @@ fun EpgGrid(
     onEventFocused: (EpgEvent?) -> Unit,
     onEventSelected: (EpgEvent) -> Unit,
     onChannelSelected: (Channel) -> Unit = {},
+    initialChannelUuid: String? = null,
     modifier: Modifier = Modifier
 ) {
     val config          = LocalConfiguration.current
@@ -93,8 +95,17 @@ fun EpgGrid(
     val totalMinutes = WINDOW_HOURS * 60
     val windowEnd    = windowStart + totalMinutes * 60L
     val horizontalScroll    = rememberScrollState()
+    val listState           = rememberLazyListState()
     val focusedChannelUuid  = remember { mutableStateOf<String?>(null) }
     val density             = LocalDensity.current
+
+    // Scroll the channel list to the last-used channel once it appears in the list.
+    var scrolledToInitial by remember { mutableStateOf(false) }
+    LaunchedEffect(channels) {
+        if (scrolledToInitial || initialChannelUuid == null || channels.isEmpty()) return@LaunchedEffect
+        val idx = channels.indexOfFirst { it.uuid == initialChannelUuid }
+        if (idx >= 0) { listState.scrollToItem(idx); scrolledToInitial = true }
+    }
 
     // Pixel constants computed once per density/screen change
     val totalEpgWidthDp = remember(totalMinutes) { (totalMinutes * DP_PER_MINUTE).dp }
@@ -185,7 +196,7 @@ fun EpgGrid(
         }
 
         // Channel rows — LazyColumn virtualises vertically; Canvas virtualises horizontally
-        LazyColumn(modifier = Modifier.weight(1f)) {
+        LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
             items(channels, key = { it.uuid }) { channel ->
                 val rawEvents = eventsByChannel[channel.uuid] ?: emptyList()
                 val cells = remember(rawEvents, windowStart, windowEnd) {

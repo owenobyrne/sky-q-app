@@ -1,12 +1,16 @@
 package ie.owen.skyq.data.api
 
 import ie.owen.skyq.data.model.ChannelGridResponse
+import ie.owen.skyq.data.model.ChannelTagListResponse
 import ie.owen.skyq.data.model.EpgGridResponse
 import ie.owen.skyq.data.model.ServiceGridResponse
 import retrofit2.http.GET
 import retrofit2.http.Query
 
 interface TvHeadendApi {
+
+    @GET("api/channeltag/list")
+    suspend fun getChannelTags(): ChannelTagListResponse
 
     @GET("api/channel/grid")
     suspend fun getChannels(
@@ -15,16 +19,16 @@ interface TvHeadendApi {
         @Query("sort_dir") sortDir: String = "ASC"
     ): ChannelGridResponse
 
+    @GET("api/mpegts/service/grid")
+    suspend fun getEncryptedServices(
+        @Query("limit") limit: Int = 9999,
+        @Query("filter") filter: String = """[{"type":"boolean","value":true,"field":"encrypted"}]"""
+    ): ServiceGridResponse
+
     @GET("api/epg/events/grid")
     suspend fun getEpgEvents(
         @Query("limit") limit: Int = 9999,
         @Query("start") start: Int = 0,
         @Query("channel") channel: String? = null
     ): EpgGridResponse
-
-    @GET("api/mpegts/service/grid")
-    suspend fun getEncryptedServices(
-        @Query("limit") limit: Int = 9999,
-        @Query("filter") filter: String = """[{"type":"boolean","value":true,"field":"encrypted"}]"""
-    ): ServiceGridResponse
 }

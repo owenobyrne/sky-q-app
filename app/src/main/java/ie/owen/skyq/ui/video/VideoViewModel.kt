@@ -10,6 +10,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.MediaSource
@@ -55,10 +56,11 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
     private val hlsSourceFactory =
         HlsMediaSource.Factory(OkHttpDataSource.Factory(TvHeadendClient.authenticatedOkHttpClient()))
 
-    // MediaSource is built per-tune (HTSP vs HLS), so no fixed factory on the player.
-    // AmlogicRenderersFactory works around the present-fence bug on the Chromecast HD —
-    // see AmlogicVideoRenderer for details.
-    val player: ExoPlayer = ExoPlayer.Builder(application, AmlogicRenderersFactory(application)).build()
+    val player: ExoPlayer = ExoPlayer.Builder(
+        application,
+        if (isAmlogicDevice) AmlogicRenderersFactory(application)
+        else DefaultRenderersFactory(application)
+    ).build()
 
     // UUID of the channel currently loaded (to avoid redundant restarts)
     private var activeUuid: String? = null

@@ -2,6 +2,7 @@ package ie.owen.skyq.ui.video
 
 import android.app.Activity
 import android.view.SurfaceView
+import android.view.TextureView
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -168,34 +169,61 @@ fun VideoOverlay(
                 .size(widthDp, heightDp)
                 .background(Color.Black)
         ) {
-            // SurfaceView lets the Amlogic decoder hand frames directly to SurfaceFlinger,
-            // avoiding the GPU/dmabuf copy path that TextureView requires (and that SELinux
-            // denies on this device), which was causing the video output buffer pool to fill
-            // and the decoder to stall while audio kept playing fine.
-            val svHolder = remember { arrayOfNulls<SurfaceView>(1) }
-            DisposableEffect(player) {
-                onDispose { svHolder[0]?.let { player.clearVideoSurfaceView(it) } }
+            if (isAmlogicDevice) {
+                // SurfaceView lets the Amlogic decoder hand frames directly to SurfaceFlinger,
+                // avoiding the GPU/dmabuf copy path that TextureView requires (and that SELinux
+                // denies on this device), which was causing the video output buffer pool to fill
+                // and the decoder to stall while audio kept playing fine.
+                val svHolder = remember { arrayOfNulls<SurfaceView>(1) }
+                DisposableEffect(player) {
+                    onDispose { svHolder[0]?.let { player.clearVideoSurfaceView(it) } }
+                }
+                AndroidView(
+                    factory = { ctx ->
+                        SurfaceView(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            svHolder[0] = this
+                            player.setVideoSurfaceView(this)
+                        }
+                    },
+                    update = { sv ->
+                        if (svHolder[0] !== sv) {
+                            svHolder[0] = sv
+                            player.setVideoSurfaceView(sv)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                // TextureView composites in the normal View layer — no hole-punch, safe on
+                // non-Amlogic devices where SurfaceView z-ordering causes a full-screen black hole.
+                val tvHolder = remember { arrayOfNulls<TextureView>(1) }
+                DisposableEffect(player) {
+                    onDispose { tvHolder[0]?.let { player.clearVideoTextureView(it) } }
+                }
+                AndroidView(
+                    factory = { ctx ->
+                        TextureView(ctx).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            tvHolder[0] = this
+                            player.setVideoTextureView(this)
+                        }
+                    },
+                    update = { tv ->
+                        if (tvHolder[0] !== tv) {
+                            tvHolder[0] = tv
+                            player.setVideoTextureView(tv)
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
-
-            AndroidView(
-                factory = { ctx ->
-                    SurfaceView(ctx).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        svHolder[0] = this
-                        player.setVideoSurfaceView(this)
-                    }
-                },
-                update = { sv ->
-                    if (svHolder[0] !== sv) {
-                        svHolder[0] = sv
-                        player.setVideoSurfaceView(sv)
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
 
             AnimatedVisibility(
                 visible = isLoading,

@@ -19,11 +19,12 @@ object AppSettings {
     private const val PREFS        = "skyq_settings"
     private const val SECURE_PREFS = "skyq_secure"
 
-    private const val KEY_MODE     = "streaming_mode"
-    private const val KEY_HOST     = "server_host"
-    private const val KEY_PORT     = "server_port"
-    private const val KEY_USERNAME = "username"
-    private const val KEY_PASSWORD = "password"
+    private const val KEY_MODE         = "streaming_mode"
+    private const val KEY_HOST         = "server_host"
+    private const val KEY_PORT         = "server_port"
+    private const val KEY_USERNAME     = "username"
+    private const val KEY_PASSWORD     = "password"
+    private const val KEY_LAST_CHANNEL = "last_channel_uuid"
 
     private var prefs: SharedPreferences? = null
     private var securePrefs: SharedPreferences? = null
@@ -32,10 +33,11 @@ object AppSettings {
     val streamingMode: StateFlow<StreamingMode> = _streamingMode.asStateFlow()
 
     // Server config — read by TvHeadendClient on each (re)build
-    var serverHost: String = ""; private set
-    var serverPort: Int    = 9981; private set
-    var username:   String = ""; private set
-    var password:   String = ""; private set
+    var serverHost:      String  = ""; private set
+    var serverPort:      Int     = 9981; private set
+    var username:        String  = ""; private set
+    var password:        String  = ""; private set
+    var lastChannelUuid: String? = null; private set
 
     val isConfigured: Boolean get() = serverHost.isNotBlank()
 
@@ -61,18 +63,40 @@ object AppSettings {
             _streamingMode.value = p.getString(KEY_MODE, null)
                 ?.let { runCatching { StreamingMode.valueOf(it) }.getOrNull() }
                 ?: StreamingMode.HLS_LL
-            serverHost = p.getString(KEY_HOST, "") ?: ""
-            serverPort = p.getInt(KEY_PORT, 9981)
+            serverHost      = p.getString(KEY_HOST, "") ?: ""
+            serverPort      = p.getInt(KEY_PORT, 9981)
+            lastChannelUuid = p.getString(KEY_LAST_CHANNEL, null)
         }
         securePrefs!!.let { s ->
             username = s.getString(KEY_USERNAME, "") ?: ""
             password = s.getString(KEY_PASSWORD, "") ?: ""
+        }
+
+        // One-time bootstrap: if credentials are still empty, check a plain prefs file
+        // that can be pushed via ADB for first-run device setup.
+        if (username.isBlank() || password.isBlank()) {
+            val bootstrap = app.getSharedPreferences("skyq_bootstrap", Context.MODE_PRIVATE)
+            bootstrap.getString(KEY_USERNAME, null)?.takeIf { it.isNotBlank() }?.let { u ->
+                bootstrap.getString(KEY_PASSWORD, null)?.takeIf { it.isNotBlank() }?.let { p ->
+                    setServerConfig(
+                        host = bootstrap.getString(KEY_HOST, serverHost) ?: serverHost,
+                        port = bootstrap.getInt(KEY_PORT, serverPort),
+                        user = u,
+                        pass = p
+                    )
+                }
+            }
         }
     }
 
     fun setStreamingMode(mode: StreamingMode) {
         _streamingMode.value = mode
         prefs?.edit()?.putString(KEY_MODE, mode.name)?.apply()
+    }
+
+    fun setLastChannel(uuid: String) {
+        lastChannelUuid = uuid
+        prefs?.edit()?.putString(KEY_LAST_CHANNEL, uuid)?.apply()
     }
 
     fun setServerConfig(host: String, port: Int, user: String, pass: String) {

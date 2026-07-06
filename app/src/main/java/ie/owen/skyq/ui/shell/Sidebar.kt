@@ -5,7 +5,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -28,7 +30,8 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import ie.owen.skyq.BuildConfig
 import ie.owen.skyq.R
-import ie.owen.skyq.navigation.NavItem
+import ie.owen.skyq.data.model.ChannelTagEntry
+import ie.owen.skyq.navigation.NavDestination
 import ie.owen.skyq.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
@@ -38,8 +41,9 @@ private const val BORDER_WIDTH_PX = 13f
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun Sidebar(
-    selectedNav: NavItem,
-    onNavSelect: (NavItem) -> Unit,
+    selectedNav: NavDestination,
+    onNavSelect: (NavDestination) -> Unit,
+    tags: List<ChannelTagEntry> = emptyList(),
     onPreviewBoundsChanged: (Rect) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -166,20 +170,28 @@ fun Sidebar(
                 .onGloballyPositioned { onPreviewBoundsChanged(it.boundsInRoot()) }
         )
 
-        Spacer(Modifier.height(24.dp))
+        // Scrollable nav items — clip to this area so items disappear under the preview when scrolled
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Spacer(Modifier.height(12.dp))
 
-        // Nav items
-        NavItem.values().forEach { item ->
-            SidebarNavItem(
-                label = item.label,
-                selected = item == selectedNav,
-                fontSize = panelFont,
-                leftPad = leftPad,
-                onClick = { onNavSelect(item) }
-            )
+            SidebarNavItem("Home",     selectedNav is NavDestination.Home,     panelFont, leftPad) { onNavSelect(NavDestination.Home) }
+            SidebarNavItem("TV Guide", selectedNav is NavDestination.Guide,    panelFont, leftPad) { onNavSelect(NavDestination.Guide) }
+
+            tags.forEach { tag ->
+                val isSelected = selectedNav is NavDestination.Tag && selectedNav.uuid == tag.key
+                SidebarNavItem(tag.`val`, isSelected, panelFont, leftPad) {
+                    onNavSelect(NavDestination.Tag(tag.key, tag.`val`))
+                }
+            }
+
+            SidebarNavItem("Settings", selectedNav is NavDestination.Settings, panelFont, leftPad) { onNavSelect(NavDestination.Settings) }
+
+            Spacer(Modifier.height(8.dp))
         }
-
-        Spacer(Modifier.weight(1f))
 
         Text(
             text = "build ${BuildConfig.BUILD_NUMBER}",
@@ -281,7 +293,7 @@ private fun SidebarNavItem(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(36.dp)
             .selectable(selected = selected, onClick = onClick)
             .focusable()
     ) {

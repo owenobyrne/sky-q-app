@@ -15,12 +15,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
-import ie.owen.skyq.navigation.NavItem
+import ie.owen.skyq.data.model.ChannelTagEntry
+import ie.owen.skyq.navigation.NavDestination
 
 @Composable
 fun AppShell(
-    selectedNav: NavItem,
-    onNavSelect: (NavItem) -> Unit,
+    selectedNav: NavDestination,
+    onNavSelect: (NavDestination) -> Unit,
+    tags: List<ChannelTagEntry> = emptyList(),
     onPreviewBoundsChanged: (Rect) -> Unit = {},
     isFullscreen: Boolean = false,
     content: @Composable BoxScope.() -> Unit
@@ -65,6 +67,7 @@ fun AppShell(
             Sidebar(
                 selectedNav = selectedNav,
                 onNavSelect = onNavSelect,
+                tags = tags,
                 onPreviewBoundsChanged = onPreviewBoundsChanged,
                 modifier = Modifier.width(panelWidth).graphicsLayer { alpha = panelAlpha }
             )

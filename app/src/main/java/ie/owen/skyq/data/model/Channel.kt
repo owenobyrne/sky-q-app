@@ -6,7 +6,8 @@ data class Channel(
     val uuid: String,
     val name: String,
     val number: Int,
-    @SerializedName("icon_public_url") val iconPublicUrl: String? = null
+    @SerializedName("icon_public_url") val iconPublicUrl: String? = null,
+    val tags: List<String> = emptyList()
 ) {
     fun iconUrl(baseUrl: String) = if (iconPublicUrl != null) "$baseUrl/$iconPublicUrl" else null
 }

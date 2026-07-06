@@ -1,6 +1,7 @@
 package ie.owen.skyq.ui.video
 
 import android.content.Context
+import android.media.MediaCodecList
 import android.media.MediaCrypto
 import android.media.MediaFormat
 import android.os.Handler
@@ -13,6 +14,12 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecInfo
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.video.MediaCodecVideoRenderer
 import androidx.media3.exoplayer.video.VideoRendererEventListener
+
+/** True when the device has an Amlogic codec (c2.amlogic.* or OMX.amlogic.*). */
+val isAmlogicDevice: Boolean by lazy {
+    MediaCodecList(MediaCodecList.ALL_CODECS)
+        .codecInfos.any { it.name.contains("amlogic", ignoreCase = true) }
+}
 
 /**
  * Works around the Amlogic Codec2 output-buffer saturation on the Chromecast HD.

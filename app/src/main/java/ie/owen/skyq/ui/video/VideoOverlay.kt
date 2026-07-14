@@ -128,6 +128,11 @@ fun VideoOverlay(
     val leftDp   = with(density) { left.toDp() }
     val topDp    = with(density) { top.toDp() }
 
+    // Bottom edge of the letterboxed 16:9 video within the (full-height) box — the caption
+    // shown while browsing hangs just below this.
+    val videoBottomPx = top + ((bottom - top) + (right - left) * 9f / 16f) / 2f
+    val videoBottomDp = with(density) { videoBottomPx.toDp() }
+
     BackHandler(enabled = isFullscreen, onBack = onBack)
 
     // Keep the screen awake (and suppress the Google TV screensaver/daydream)
@@ -239,6 +244,47 @@ fun VideoOverlay(
                         contentAlignment = Alignment.Center
                     ) {
                         LoadingSpinner()
+                    }
+                }
+            }
+        }
+
+        // Subtle caption under the main video while browsing: logo · channel · programme,
+        // right-aligned to the video with a little right padding.
+        if (browseOpen && meta != null) {
+            Box(
+                modifier = Modifier
+                    .absoluteOffset(leftDp, videoBottomDp)
+                    .width(widthDp)
+                    .padding(top = 12.dp, end = 16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (meta.iconPath.isNotEmpty()) {
+                        AsyncImage(
+                            model = TvHeadendClient.resolveUrl(meta.iconPath),
+                            contentDescription = meta.name,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                    }
+                    Text(
+                        meta.name,
+                        color = Color.White.copy(alpha = 0.90f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (meta.title.isNotEmpty()) {
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            meta.title,
+                            color = Color.White.copy(alpha = 0.55f),
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
             }

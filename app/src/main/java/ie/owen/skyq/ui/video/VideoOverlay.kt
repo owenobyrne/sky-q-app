@@ -71,6 +71,7 @@ fun VideoOverlay(
     isFullscreen: Boolean,
     previewBounds: Rect,
     meta: ChannelMeta?,
+    osdTrigger: Int = 0,
     onBack: () -> Unit
 ) {
     val config  = LocalConfiguration.current
@@ -141,8 +142,10 @@ fun VideoOverlay(
                     playbackState == Player.STATE_IDLE ||
                     !firstFrameRendered
 
+    // Re-runs on fullscreen entry and on every channel hop (osdTrigger) so the info
+    // overlay flashes up again each time the channel changes.
     var osdVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(isFullscreen) {
+    LaunchedEffect(isFullscreen, osdTrigger) {
         if (isFullscreen) {
             delay(300)
             osdVisible = true

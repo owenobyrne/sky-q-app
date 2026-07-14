@@ -22,6 +22,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.viewmodel.compose.viewModel
+import ie.owen.skyq.data.model.Channel
+import ie.owen.skyq.data.model.EpgEvent
 import ie.owen.skyq.data.settings.AppSettings
 import ie.owen.skyq.navigation.NavDestination
 import ie.owen.skyq.ui.guide.TvGuideScreen
@@ -38,6 +40,20 @@ import ie.owen.skyq.ui.video.VideoViewModel
 private val DPAD_KEYS = setOf(
     Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight, Key.DirectionCenter
 )
+
+/** Builds the fullscreen OSD metadata for a channel from its currently-airing EPG event. */
+private fun channelMeta(channel: Channel, eventsByChannel: Map<String, List<EpgEvent>>): ChannelMeta {
+    val live = eventsByChannel[channel.uuid]?.firstOrNull { it.isLive }
+    return ChannelMeta(
+        name        = channel.name,
+        number      = channel.number.toString(),
+        title       = live?.title ?: "",
+        iconPath    = live?.channelIcon ?: channel.iconPublicUrl ?: "",
+        startTime   = live?.start,
+        stopTime    = live?.stop,
+        description = live?.description ?: live?.summary ?: live?.subtitle
+    )
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,7 +75,25 @@ private fun SkyQApp() {
     var previewBounds   by remember { mutableStateOf(Rect.Zero) }
     var isFullscreen    by remember { mutableStateOf(false) }
     var fullscreenMeta  by remember { mutableStateOf<ChannelMeta?>(null) }
+    var fullscreenUuid  by remember { mutableStateOf<String?>(null) }
+    var osdTrigger      by remember { mutableIntStateOf(0) }
     val guideState      by guideViewModel.state.collectAsStateWithLifecycle()
+
+    // Up/Down while fullscreen: hop to the previous/next channel in the (tag-filtered)
+    // guide list, wrapping at the ends. Retunes, refreshes the info OSD from the new
+    // channel's live event, and persists the choice as the last channel.
+    fun stepChannel(delta: Int) {
+        val chans = guideState.channels
+        if (chans.isEmpty()) return
+        val curIdx  = chans.indexOfFirst { it.uuid == fullscreenUuid }
+        val nextIdx = if (curIdx < 0) 0 else (curIdx + delta + chans.size) % chans.size
+        val ch = chans[nextIdx]
+        fullscreenUuid = ch.uuid
+        fullscreenMeta = channelMeta(ch, guideState.eventsByChannel)
+        AppSettings.setLastChannel(ch.uuid)
+        videoViewModel.setChannel(ch.uuid)
+        osdTrigger++
+    }
 
     val density = LocalDensity.current
     val borderAlpha by animateFloatAsState(
@@ -74,10 +108,17 @@ private fun SkyQApp() {
     }
 
     Box(Modifier.fillMaxSize().onPreviewKeyEvent { keyEvent ->
-        // While fullscreen, eat all D-pad navigation so the EPG behind can't receive
-        // focus-traversal events (which stall ExoPlayer via main-thread recompositions).
-        // Up/Down will drive the mini-EPG overlay once that's built.
-        isFullscreen && keyEvent.type == KeyEventType.KeyDown && keyEvent.key in DPAD_KEYS
+        // While fullscreen, Up/Down change the channel; every other D-pad key is eaten so
+        // the EPG behind can't receive focus-traversal events (which stall ExoPlayer via
+        // main-thread recompositions).
+        if (isFullscreen && keyEvent.type == KeyEventType.KeyDown) {
+            when (keyEvent.key) {
+                Key.DirectionUp   -> { stepChannel(-1); true }
+                Key.DirectionDown -> { stepChannel(+1); true }
+                in DPAD_KEYS      -> true
+                else              -> false
+            }
+        } else false
     }) {
         AppShell(
             selectedNav = selectedNav,
@@ -101,6 +142,7 @@ private fun SkyQApp() {
                         AppSettings.setLastChannel(uuid)
                         videoViewModel.setChannel(uuid)
                         fullscreenMeta = ChannelMeta(name, number, title, iconPath, startTime, stopTime, description)
+                        fullscreenUuid = uuid
                         isFullscreen = true
                     },
                     onPreviewChannelChanged = { uuid ->
@@ -118,6 +160,7 @@ private fun SkyQApp() {
                 isFullscreen    = isFullscreen,
                 previewBounds   = previewBounds,
                 meta            = if (isFullscreen) fullscreenMeta else null,
+                osdTrigger      = osdTrigger,
                 onBack          = { isFullscreen = false }
             )
 

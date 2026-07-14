@@ -130,15 +130,21 @@ private fun SkyQApp() {
         browseOpen = false
         videoViewModel.stopPreview()
     }
-    // Enter on the preview: switch the main video to the browsed channel, then close.
-    fun selectBrowse() {
-        val uuid = browseUuid ?: run { closeBrowse(); return }
-        fullscreenUuid = uuid
-        fullscreenMeta = browseMeta
-        AppSettings.setLastChannel(uuid)
-        videoViewModel.setChannel(uuid)
-        osdTrigger++
-        closeBrowse()
+    // Enter on the preview: swap the two channels but stay in split view — the browsed
+    // channel becomes the main (right, with audio) and the old main drops into the
+    // preview (left). The main [player] always holds the audio, so no muting is needed.
+    fun swapBrowse() {
+        val newMain    = browseUuid ?: return
+        val newPreview = fullscreenUuid
+        val newMainMeta    = browseMeta
+        val newPreviewMeta = fullscreenMeta
+        fullscreenUuid = newMain
+        fullscreenMeta = newMainMeta
+        browseUuid = newPreview
+        browseMeta = newPreviewMeta
+        AppSettings.setLastChannel(newMain)
+        videoViewModel.setChannel(newMain)
+        newPreview?.let { videoViewModel.setPreviewChannel(it) }
     }
 
     val density = LocalDensity.current
@@ -158,11 +164,12 @@ private fun SkyQApp() {
         // traversal stalls ExoPlayer via main-thread recompositions), so all of it is eaten.
         if (isFullscreen && keyEvent.type == KeyEventType.KeyDown) {
             if (browseOpen) {
-                // Browse pane: Up/Down change the previewed channel, OK switches to it, Left closes.
+                // Browse pane: Up/Down change the previewed channel, OK swaps it into the
+                // main (staying in split view), Left closes.
                 when (keyEvent.key) {
                     Key.DirectionUp                 -> { stepBrowse(-1); true }
                     Key.DirectionDown               -> { stepBrowse(+1); true }
-                    Key.DirectionCenter, Key.Enter  -> { selectBrowse(); true }
+                    Key.DirectionCenter, Key.Enter  -> { swapBrowse(); true }
                     Key.DirectionLeft, Key.Back     -> { closeBrowse(); true }
                     in DPAD_KEYS                    -> true
                     else                            -> false

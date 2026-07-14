@@ -145,7 +145,7 @@ fun BrowsePane(
 
             Spacer(Modifier.weight(1f))
             Text(
-                "▲ ▼ browse   •   OK watch   •   ◀ close",
+                "▲ ▼ browse   •   OK swap   •   ◀ close",
                 color = Color.White.copy(alpha = 0.4f),
                 fontSize = 11.sp
             )

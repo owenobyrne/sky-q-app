@@ -1,14 +1,18 @@
 package ie.owen.skyq.ui.video
 
 import android.app.Activity
+import android.graphics.Outline
 import android.view.SurfaceView
 import android.view.TextureView
+import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -25,6 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -76,6 +81,10 @@ private const val BROWSE_MAIN_RIGHT_INSET = 0.01f
 // Blue wash shown behind the browse pane — matches the AppShell / EPG background gradient.
 private val BrowseWash = Brush.horizontalGradient(0f to Color(0xFF011799), 1f to Color(0xFF0051FB))
 
+// While browsing, the (shrunken) main video gets rounded corners and a soft drop shadow.
+private val BrowseCornerRadius = 14.dp
+private val BrowseElevation    = 12.dp
+
 @Composable
 fun VideoOverlay(
     player: ExoPlayer,
@@ -108,6 +117,11 @@ fun VideoOverlay(
     // The blue base is always present under fullscreen; the black scrim fades away to reveal it.
     val blueBaseAlpha  by animateFloatAsState(if (isFullscreen) 1f else 0f, scrimSpec, label = "blueBase")
     val blackScrimAlpha by animateFloatAsState(if (isFullscreen && !browseOpen) 1f else 0f, scrimSpec, label = "blackScrim")
+
+    // Rounded corners + drop shadow only while the main video is shrunken for browsing.
+    val cornerRadius by animateDpAsState(if (browseOpen) BrowseCornerRadius else 0.dp, tween(380, easing = FastOutSlowInEasing), label = "corner")
+    val elevation    by animateDpAsState(if (browseOpen) BrowseElevation else 0.dp, tween(380, easing = FastOutSlowInEasing), label = "elev")
+    val cornerRadiusPx = with(density) { cornerRadius.toPx() }
 
     val widthDp  = with(density) { (right - left).toDp() }
     val heightDp = with(density) { (bottom - top).toDp() }
@@ -203,75 +217,29 @@ fun VideoOverlay(
             // shows through the bars above/below the (16:9) video while browsing.
             contentAlignment = Alignment.Center
         ) {
-            if (isAmlogicDevice) {
-                // SurfaceView lets the Amlogic decoder hand frames directly to SurfaceFlinger,
-                // avoiding the GPU/dmabuf copy path that TextureView requires (and that SELinux
-                // denies on this device), which was causing the video output buffer pool to fill
-                // and the decoder to stall while audio kept playing fine.
-                val svHolder = remember { arrayOfNulls<SurfaceView>(1) }
-                DisposableEffect(player) {
-                    onDispose { svHolder[0]?.let { player.clearVideoSurfaceView(it) } }
-                }
-                AndroidView(
-                    factory = { ctx ->
-                        SurfaceView(ctx).apply {
-                            layoutParams = ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                            svHolder[0] = this
-                            player.setVideoSurfaceView(this)
-                        }
-                    },
-                    update = { sv ->
-                        if (svHolder[0] !== sv) {
-                            svHolder[0] = sv
-                            player.setVideoSurfaceView(sv)
-                        }
-                    },
-                    // Letterbox to 16:9 within the (possibly non-16:9) video box.
-                    modifier = Modifier.aspectRatio(16f / 9f)
-                )
-            } else {
-                // TextureView composites in the normal View layer — no hole-punch, safe on
-                // non-Amlogic devices where SurfaceView z-ordering causes a full-screen black hole.
-                val tvHolder = remember { arrayOfNulls<TextureView>(1) }
-                DisposableEffect(player) {
-                    onDispose { tvHolder[0]?.let { player.clearVideoTextureView(it) } }
-                }
-                AndroidView(
-                    factory = { ctx ->
-                        TextureView(ctx).apply {
-                            layoutParams = ViewGroup.LayoutParams(
-                                ViewGroup.LayoutParams.MATCH_PARENT,
-                                ViewGroup.LayoutParams.MATCH_PARENT
-                            )
-                            tvHolder[0] = this
-                            player.setVideoTextureView(this)
-                        }
-                    },
-                    update = { tv ->
-                        if (tvHolder[0] !== tv) {
-                            tvHolder[0] = tv
-                            player.setVideoTextureView(tv)
-                        }
-                    },
-                    // Letterbox to 16:9 within the (possibly non-16:9) video box.
-                    modifier = Modifier.aspectRatio(16f / 9f)
-                )
-            }
-
-            AnimatedVisibility(
-                visible = isLoading,
-                enter = fadeIn(tween(150)),
-                exit  = fadeOut(tween(400)),
-                modifier = Modifier.fillMaxSize()
+            // The 16:9 video itself — rounded + drop-shadowed while browsing. The black
+            // background makes the shadow render and is fully covered by the video surface.
+            Box(
+                modifier = Modifier
+                    .aspectRatio(16f / 9f)
+                    .shadow(elevation, RoundedCornerShape(cornerRadius))
+                    .background(Color.Black),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize().background(Color.Black),
-                    contentAlignment = Alignment.Center
+                VideoSurface(player, cornerRadiusPx, Modifier.fillMaxSize())
+
+                AnimatedVisibility(
+                    visible = isLoading,
+                    enter = fadeIn(tween(150)),
+                    exit  = fadeOut(tween(400)),
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    LoadingSpinner()
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(Color.Black),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingSpinner()
+                    }
                 }
             }
         }
@@ -289,6 +257,68 @@ fun VideoOverlay(
                 Box(Modifier.fillMaxWidth().height(osdHeight)) { ChannelOsd(meta) }
             }
         }
+    }
+}
+
+/**
+ * Renders [player] into an Amlogic SurfaceView (hole-punch) or a TextureView elsewhere,
+ * rounding the corners via [cornerRadiusPx] with a ViewOutline (a Compose clip can't round a
+ * hole-punch surface). [cornerRadiusPx] is held in an array the outline provider reads, so
+ * animating the radius just needs invalidateOutline() on each update.
+ */
+@Composable
+private fun VideoSurface(player: ExoPlayer, cornerRadiusPx: Float, modifier: Modifier = Modifier) {
+    val radius = remember { floatArrayOf(0f) }
+    radius[0] = cornerRadiusPx
+    val outline = remember {
+        object : ViewOutlineProvider() {
+            override fun getOutline(view: View, o: Outline) {
+                o.setRoundRect(0, 0, view.width, view.height, radius[0])
+            }
+        }
+    }
+    if (isAmlogicDevice) {
+        val holder = remember { arrayOfNulls<SurfaceView>(1) }
+        DisposableEffect(player) { onDispose { holder[0]?.let { player.clearVideoSurfaceView(it) } } }
+        AndroidView(
+            factory = { ctx ->
+                SurfaceView(ctx).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    outlineProvider = outline
+                    clipToOutline = true
+                    holder[0] = this
+                    player.setVideoSurfaceView(this)
+                }
+            },
+            update = { sv ->
+                if (holder[0] !== sv) { holder[0] = sv; player.setVideoSurfaceView(sv) }
+                sv.invalidateOutline()
+            },
+            modifier = modifier
+        )
+    } else {
+        val holder = remember { arrayOfNulls<TextureView>(1) }
+        DisposableEffect(player) { onDispose { holder[0]?.let { player.clearVideoTextureView(it) } } }
+        AndroidView(
+            factory = { ctx ->
+                TextureView(ctx).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    outlineProvider = outline
+                    clipToOutline = true
+                    holder[0] = this
+                    player.setVideoTextureView(this)
+                }
+            },
+            update = { tv ->
+                if (holder[0] !== tv) { holder[0] = tv; player.setVideoTextureView(tv) }
+                tv.invalidateOutline()
+            },
+            modifier = modifier
+        )
     }
 }
 

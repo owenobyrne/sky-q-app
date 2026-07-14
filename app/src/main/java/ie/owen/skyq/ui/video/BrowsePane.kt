@@ -1,8 +1,11 @@
 package ie.owen.skyq.ui.video
 
+import android.graphics.Outline
 import android.view.SurfaceView
 import android.view.TextureView
+import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,6 +37,8 @@ private val PaneAccent = Color(0xFF2B52E8)
  *  screen edge and the main video. */
 private const val PANE_TOP_FRACTION  = 0.16f
 private const val PANE_SIDE_FRACTION = 0.02f
+/** Rounded corners to match the main video (no shadow — the preview sits flat on the wash). */
+private val PreviewCornerRadius = 14.dp
 
 /**
  * Left-hand "browse other channels" pane shown when the main video contracts. Renders a
@@ -49,6 +55,7 @@ fun BrowsePane(
     modifier: Modifier = Modifier
 ) {
     val config = LocalConfiguration.current
+    val cornerRadiusPx = with(LocalDensity.current) { PreviewCornerRadius.toPx() }
     Column(
         modifier = modifier
             .fillMaxHeight()
@@ -59,14 +66,16 @@ fun BrowsePane(
             )
     ) {
         // Live preview video — the padded pane width is already 16:9, so it fills cleanly.
+        // Rounded to match the main video; no shadow, so it stays flat on the blue wash.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
+                .clip(RoundedCornerShape(PreviewCornerRadius))
                 .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            PreviewSurface(player, Modifier.aspectRatio(16f / 9f))
+            PreviewSurface(player, cornerRadiusPx, Modifier.fillMaxSize())
 
             var buffering by remember { mutableStateOf(true) }
             DisposableEffect(player) {
@@ -163,7 +172,16 @@ fun BrowsePane(
 }
 
 @Composable
-private fun PreviewSurface(player: ExoPlayer, modifier: Modifier = Modifier) {
+private fun PreviewSurface(player: ExoPlayer, cornerRadiusPx: Float, modifier: Modifier = Modifier) {
+    val radius = remember { floatArrayOf(0f) }
+    radius[0] = cornerRadiusPx
+    val outline = remember {
+        object : ViewOutlineProvider() {
+            override fun getOutline(view: View, o: Outline) {
+                o.setRoundRect(0, 0, view.width, view.height, radius[0])
+            }
+        }
+    }
     if (isAmlogicDevice) {
         val holder = remember { arrayOfNulls<SurfaceView>(1) }
         DisposableEffect(player) { onDispose { holder[0]?.let { player.clearVideoSurfaceView(it) } } }
@@ -175,11 +193,16 @@ private fun PreviewSurface(player: ExoPlayer, modifier: Modifier = Modifier) {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
                     )
+                    outlineProvider = outline
+                    clipToOutline = true
                     holder[0] = this
                     player.setVideoSurfaceView(this)
                 }
             },
-            update = { sv -> if (holder[0] !== sv) { holder[0] = sv; player.setVideoSurfaceView(sv) } },
+            update = { sv ->
+                if (holder[0] !== sv) { holder[0] = sv; player.setVideoSurfaceView(sv) }
+                sv.invalidateOutline()
+            },
             modifier = modifier
         )
     } else {
@@ -191,11 +214,16 @@ private fun PreviewSurface(player: ExoPlayer, modifier: Modifier = Modifier) {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
                     )
+                    outlineProvider = outline
+                    clipToOutline = true
                     holder[0] = this
                     player.setVideoTextureView(this)
                 }
             },
-            update = { tv -> if (holder[0] !== tv) { holder[0] = tv; player.setVideoTextureView(tv) } },
+            update = { tv ->
+                if (holder[0] !== tv) { holder[0] = tv; player.setVideoTextureView(tv) }
+                tv.invalidateOutline()
+            },
             modifier = modifier
         )
     }

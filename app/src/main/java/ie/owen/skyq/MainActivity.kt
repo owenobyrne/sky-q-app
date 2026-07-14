@@ -228,20 +228,20 @@ private fun SkyQApp() {
                 meta            = if (isFullscreen) fullscreenMeta else null,
                 osdTrigger      = osdTrigger,
                 browseOpen      = browseOpen,
+                // Browse pane, rendered behind the main video on the blue wash.
+                browseContent   = {
+                    if (browseOpen) {
+                        BrowsePane(
+                            player = videoViewModel.previewPlayer,
+                            meta   = browseMeta,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .fillMaxWidth(BROWSE_PANE_FRACTION)
+                        )
+                    }
+                },
                 onBack          = { isFullscreen = false }
             )
-
-            // Left-hand browse pane (over the contracted main video). Composed after
-            // VideoOverlay so its BackHandler takes priority over the fullscreen one.
-            if (browseOpen) {
-                BrowsePane(
-                    player = videoViewModel.previewPlayer,
-                    meta   = browseMeta,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .fillMaxWidth(BROWSE_PANE_FRACTION)
-                )
-            }
             BackHandler(enabled = browseOpen) { closeBrowse() }
 
             if (borderAlpha > 0f) {

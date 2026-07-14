@@ -4,7 +4,6 @@ import android.view.SurfaceView
 import android.view.TextureView
 import android.view.ViewGroup
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
@@ -12,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -27,14 +27,19 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val PaneBackground = Color(0xF20A1020)
-private val PaneAccent     = Color(0xFF2B52E8)
+private val PaneAccent = Color(0xFF2B52E8)
+
+/** Preview UI sits directly on the blue wash: pushed down the screen and inset from the
+ *  screen edge and the main video. */
+private const val PANE_TOP_FRACTION  = 0.16f
+private const val PANE_SIDE_FRACTION = 0.02f
 
 /**
  * Left-hand "browse other channels" pane shown when the main video contracts. Renders a
  * muted live preview of [player] (its own surface, z-ordered above the main video) plus the
- * previewed channel's now-playing info. Up/Down retunes the preview; Enter promotes it to
- * the main video; Left closes the pane — all handled by the caller's key router.
+ * previewed channel's now-playing info, sitting directly on the blue wash (no container box).
+ * Up/Down retunes the preview; Enter swaps it into the main; Left closes the pane — all
+ * handled by the caller's key router.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -43,13 +48,17 @@ fun BrowsePane(
     meta: ChannelMeta?,
     modifier: Modifier = Modifier
 ) {
+    val config = LocalConfiguration.current
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .background(PaneBackground)
-            .border(width = 1.dp, color = Color.White.copy(alpha = 0.10f))
+            .padding(
+                top   = (config.screenHeightDp * PANE_TOP_FRACTION).dp,
+                start = (config.screenWidthDp  * PANE_SIDE_FRACTION).dp,
+                end   = (config.screenWidthDp  * PANE_SIDE_FRACTION).dp
+            )
     ) {
-        // Live preview video — 16:9, letterboxed inside the pane width.
+        // Live preview video — the padded pane width is already 16:9, so it fills cleanly.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -77,8 +86,8 @@ fun BrowsePane(
             }
         }
 
-        // Now-playing info for the previewed channel.
-        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp)) {
+        // Now-playing info for the previewed channel, sitting directly on the blue wash.
+        Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
             if (meta == null) {
                 Text("Browsing…", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
                 return@Column

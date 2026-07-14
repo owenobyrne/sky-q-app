@@ -26,9 +26,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -67,6 +69,12 @@ private val OsdBorder     = Color(0x55CCCCCC)
 
 /** Fraction of the screen width taken by the left browse pane (main video keeps the rest). */
 const val BROWSE_PANE_FRACTION = 1f / 3f
+/** In browse mode the main video pulls in this fraction of the screen width from the right edge,
+ *  so the blue wash peeks behind it. */
+private const val BROWSE_MAIN_RIGHT_INSET = 0.01f
+
+// Blue wash shown behind the browse pane — matches the AppShell / EPG background gradient.
+private val BrowseWash = Brush.horizontalGradient(0f to Color(0xFF011799), 1f to Color(0xFF0051FB))
 
 @Composable
 fun VideoOverlay(
@@ -76,6 +84,7 @@ fun VideoOverlay(
     meta: ChannelMeta?,
     osdTrigger: Int = 0,
     browseOpen: Boolean = false,
+    browseContent: @Composable BoxScope.() -> Unit = {},
     onBack: () -> Unit
 ) {
     val config  = LocalConfiguration.current
@@ -86,13 +95,19 @@ fun VideoOverlay(
     val videoSpec = tween<Float>(durationMillis = 380, easing = FastOutSlowInEasing)
     val scrimSpec = tween<Float>(durationMillis = 180)
 
-    // When the browse pane is open, the main video contracts to the right two-thirds.
-    val fsLeft = if (browseOpen) screenW * BROWSE_PANE_FRACTION else 0f
+    // When the browse pane is open, the main video contracts to the right, pulling in a
+    // little from the right edge so the blue wash shows behind it.
+    val fsLeft  = if (browseOpen) screenW * BROWSE_PANE_FRACTION else 0f
+    val fsRight = if (browseOpen) screenW * (1f - BROWSE_MAIN_RIGHT_INSET) else screenW
     val left   by animateFloatAsState(if (isFullscreen) fsLeft else previewBounds.left,  videoSpec, label = "vL")
     val top    by animateFloatAsState(if (isFullscreen) 0f else previewBounds.top,   videoSpec, label = "vT")
-    val right  by animateFloatAsState(if (isFullscreen) screenW else previewBounds.right,  videoSpec, label = "vR")
+    val right  by animateFloatAsState(if (isFullscreen) fsRight else previewBounds.right,  videoSpec, label = "vR")
     val bottom by animateFloatAsState(if (isFullscreen) screenH else previewBounds.bottom, videoSpec, label = "vB")
-    val scrimAlpha by animateFloatAsState(if (isFullscreen) 1f else 0f, scrimSpec, label = "scrim")
+    // Two full-screen scrims that hide the EPG behind the fullscreen video: black normally,
+    // and the blue wash while browsing (so the browse pane sits on the EPG-style background).
+    // The blue base is always present under fullscreen; the black scrim fades away to reveal it.
+    val blueBaseAlpha  by animateFloatAsState(if (isFullscreen) 1f else 0f, scrimSpec, label = "blueBase")
+    val blackScrimAlpha by animateFloatAsState(if (isFullscreen && !browseOpen) 1f else 0f, scrimSpec, label = "blackScrim")
 
     val widthDp  = with(density) { (right - left).toDp() }
     val heightDp = with(density) { (bottom - top).toDp() }
@@ -167,10 +182,18 @@ fun VideoOverlay(
     val osdVMargin = (config.screenHeightDp * 0.08f).dp
 
     Box(Modifier.fillMaxSize()) {
-        // Scrim — fades in quickly so AppShell disappears behind the growing video
-        if (scrimAlpha > 0f) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha)))
+        // Blue wash base — the EPG-style background the browse pane sits on.
+        if (blueBaseAlpha > 0f) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = blueBaseAlpha }.background(BrowseWash))
         }
+        // Black scrim over the wash — fades in so AppShell disappears behind the growing
+        // video, and fades away (revealing the blue wash) while browsing.
+        if (blackScrimAlpha > 0f) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = blackScrimAlpha)))
+        }
+
+        // Browse pane — sits on the blue wash, behind the main video.
+        browseContent()
 
         Box(
             modifier = Modifier

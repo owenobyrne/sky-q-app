@@ -69,6 +69,14 @@ object TvHeadendClient {
     fun buildHlsLlUrl(channelUuid: String) =
         "${baseUrl}hls/channel/$channelUuid.m3u8?profile=hls-ll"
 
+    /**
+     * Low-resolution (~384p H264/AAC MPEG-TS) stream for the browse-preview pane, so the
+     * second decoder is far lighter than the HD main stream and the two don't stutter.
+     * webtv-h264-aac-mpegts is an existing TVHeadend transcode profile.
+     */
+    fun buildPreviewUrl(channelUuid: String) =
+        "${baseUrl}stream/channel/$channelUuid?profile=webtv-h264-aac-mpegts"
+
     fun resolveUrl(path: String): String =
         if (path.startsWith("http")) path else "$baseUrl$path"
 }

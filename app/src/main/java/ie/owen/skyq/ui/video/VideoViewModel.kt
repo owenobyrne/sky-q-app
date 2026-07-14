@@ -55,6 +55,12 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         ProgressiveMediaSource.Factory(htspFactory, DefaultExtractorsFactory())
     private val hlsSourceFactory =
         HlsMediaSource.Factory(OkHttpDataSource.Factory(TvHeadendClient.authenticatedOkHttpClient()))
+    // Progressive MPEG-TS source for the low-res browse preview (webtv-h264-aac-mpegts).
+    private val previewSourceFactory =
+        ProgressiveMediaSource.Factory(
+            OkHttpDataSource.Factory(TvHeadendClient.authenticatedOkHttpClient()),
+            DefaultExtractorsFactory()
+        )
 
     val player: ExoPlayer = ExoPlayer.Builder(
         application,
@@ -194,9 +200,10 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         previewJob?.cancel()
         previewJob = viewModelScope.launch {
             delay(PREVIEW_DEBOUNCE_MS)
-            val source = buildSource(uuid) ?: run {
-                Log.w(TAG, "preview: no source for $uuid"); previewPendingUuid = null; return@launch
-            }
+            // Always the low-res MPEG-TS transcode — keeps the second decoder light.
+            val source = previewSourceFactory.createMediaSource(
+                MediaItem.fromUri(TvHeadendClient.buildPreviewUrl(uuid))
+            )
             previewUuid = uuid
             previewPendingUuid = null
             previewPlayer.setMediaSource(source)

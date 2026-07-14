@@ -1,22 +1,16 @@
 package ie.owen.skyq.ui.theme
 
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import ie.owen.skyq.R
 
-val fontProvider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage  = "com.google.android.gms",
-    certificates     = R.array.com_google_android_gms_fonts_certs
-)
-
-private val inter = GoogleFont("Inter")
-
-val InterFontFamily = FontFamily(
-    Font(googleFont = inter, fontProvider = fontProvider, weight = FontWeight.Light),
-    Font(googleFont = inter, fontProvider = fontProvider, weight = FontWeight.Normal),
-    Font(googleFont = inter, fontProvider = fontProvider, weight = FontWeight.Medium),
-    Font(googleFont = inter, fontProvider = fontProvider, weight = FontWeight.Bold),
+// Google Sans Flex — Google's brand typeface (open-sourced late 2025, SIL OFL), the font
+// behind the Google TV look. Bundled as static weight instances rather than fetched via the
+// Play Services downloadable-fonts provider, which doesn't serve the Google Sans family yet.
+val AppFontFamily = FontFamily(
+    Font(R.font.google_sans_flex_light,   FontWeight.Light),
+    Font(R.font.google_sans_flex_regular, FontWeight.Normal),
+    Font(R.font.google_sans_flex_medium,  FontWeight.Medium),
+    Font(R.font.google_sans_flex_bold,    FontWeight.Bold),
 )

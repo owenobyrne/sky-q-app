@@ -8,22 +8,22 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Typography
 import androidx.tv.material3.darkColorScheme
 
-private fun interTypography() = Typography(
-    displayLarge  = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    displayMedium = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    displaySmall  = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    headlineLarge = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    headlineMedium= TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    headlineSmall = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    titleLarge    = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    titleMedium   = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    titleSmall    = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    bodyLarge     = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    bodyMedium    = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    bodySmall     = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    labelLarge    = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    labelMedium   = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
-    labelSmall    = TextStyle(fontFamily = InterFontFamily, fontWeight = FontWeight.Light),
+private fun appTypography() = Typography(
+    displayLarge  = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    displayMedium = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    displaySmall  = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    headlineLarge = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    headlineMedium= TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    headlineSmall = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    titleLarge    = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    titleMedium   = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    titleSmall    = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    bodyLarge     = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    bodyMedium    = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    bodySmall     = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    labelLarge    = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    labelMedium   = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
+    labelSmall    = TextStyle(fontFamily = AppFontFamily, fontWeight = FontWeight.Light),
 )
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -40,7 +40,7 @@ fun SkyQTheme(content: @Composable () -> Unit) {
             secondary  = SkyBlue,
             onSecondary = SkyText,
         ),
-        typography = interTypography(),
+        typography = appTypography(),
         content = content
     )
 }

@@ -120,14 +120,14 @@ fun EpgGrid(
     val textMeasurer = rememberTextMeasurer(cacheSize = 256)
     val cellTextStyleNormal = remember(cellFont) {
         TextStyle(
-            color = SkyText, fontSize = cellFont.sp, fontFamily = InterFontFamily,
+            color = SkyText, fontSize = cellFont.sp, fontFamily = AppFontFamily,
             fontWeight = FontWeight.Normal,
             shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(1f, 2f), 2f)
         )
     }
     val cellTextStyleLight = remember(cellFont) {
         TextStyle(
-            color = SkyText, fontSize = cellFont.sp, fontFamily = InterFontFamily,
+            color = SkyText, fontSize = cellFont.sp, fontFamily = AppFontFamily,
             fontWeight = FontWeight.Light,
             shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(1f, 2f), 2f)
         )
@@ -159,7 +159,7 @@ fun EpgGrid(
                     "Today",
                     color = SkyTextDim,
                     fontSize = cellFont.sp,
-                    fontFamily = InterFontFamily,
+                    fontFamily = AppFontFamily,
                     fontWeight = FontWeight.Light,
                     modifier = Modifier.padding(start = 12.dp),
                     style = dropShadow
@@ -185,7 +185,7 @@ fun EpgGrid(
                             text = formatTime(tickUnix),
                             color = SkyTextDim,
                             fontSize = cellFont.sp,
-                            fontFamily = InterFontFamily,
+                            fontFamily = AppFontFamily,
                             fontWeight = FontWeight.Light,
                             modifier = Modifier.padding(start = 8.dp),
                             style = dropShadow
@@ -423,7 +423,7 @@ private fun ChannelCell(
             text = channel.name,
             color = SkyText,
             fontSize = cellFont.sp,
-            fontFamily = InterFontFamily,
+            fontFamily = AppFontFamily,
             fontWeight = if (isRowFocused) FontWeight.Normal else FontWeight.Light,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -433,7 +433,7 @@ private fun ChannelCell(
             text = channel.number.toString(),
             color = SkyTextDim,
             fontSize = cellFont.sp,
-            fontFamily = InterFontFamily,
+            fontFamily = AppFontFamily,
             fontWeight = if (isRowFocused) FontWeight.Normal else FontWeight.Light
         )
     }

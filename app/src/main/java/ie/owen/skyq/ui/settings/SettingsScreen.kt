@@ -53,7 +53,7 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
         verticalArrangement = Arrangement.spacedBy(32.dp)
     ) {
         item {
-            Text("Settings", color = SkyText, fontSize = 34.sp, fontWeight = FontWeight.Bold, fontFamily = InterFontFamily)
+            Text("Settings", color = SkyText, fontSize = 34.sp, fontWeight = FontWeight.Bold, fontFamily = AppFontFamily)
         }
 
         // ── Server ────────────────────────────────────────────────────────────
@@ -68,14 +68,14 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
                     onClick = { if (!scanning) vm.scan() }
                 )
                 if (scanning) {
-                    Text("Searching for _htsp._tcp on local network…", color = SkyTextDim, fontSize = 13.sp, fontFamily = InterFontFamily)
+                    Text("Searching for _htsp._tcp on local network…", color = SkyTextDim, fontSize = 13.sp, fontFamily = AppFontFamily)
                 }
             }
 
             // Discovered servers
             if (discovered.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("Found:", color = SkyTextDim, fontSize = 13.sp, fontFamily = InterFontFamily)
+                Text("Found:", color = SkyTextDim, fontSize = 13.sp, fontFamily = AppFontFamily)
                 Spacer(Modifier.height(6.dp))
                 discovered.forEach { server ->
                     DiscoveredServerRow(server = server, onClick = { vm.selectServer(server) })
@@ -133,7 +133,7 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
             SectionHeader("Streaming method")
             Text(
                 "How live TV is streamed from the server.",
-                color = SkyTextDim, fontSize = 14.sp, fontWeight = FontWeight.Light, fontFamily = InterFontFamily
+                color = SkyTextDim, fontSize = 14.sp, fontWeight = FontWeight.Light, fontFamily = AppFontFamily
             )
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -163,7 +163,7 @@ fun SettingsScreen(vm: SettingsViewModel = viewModel()) {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SectionHeader(title: String) {
-    Text(title, color = SkyText, fontSize = 20.sp, fontWeight = FontWeight.Medium, fontFamily = InterFontFamily)
+    Text(title, color = SkyText, fontSize = 20.sp, fontWeight = FontWeight.Medium, fontFamily = AppFontFamily)
     Spacer(Modifier.height(4.dp))
 }
 
@@ -183,7 +183,7 @@ private fun TvTextField(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     Column(modifier = modifier) {
-        Text(label, color = SkyTextDim, fontSize = 13.sp, fontFamily = InterFontFamily, fontWeight = FontWeight.Light)
+        Text(label, color = SkyTextDim, fontSize = 13.sp, fontFamily = AppFontFamily, fontWeight = FontWeight.Light)
         Spacer(Modifier.height(4.dp))
         BasicTextField(
             value = value,
@@ -202,7 +202,7 @@ private fun TvTextField(
                 )
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-            textStyle = TextStyle(color = SkyText, fontSize = 16.sp, fontFamily = InterFontFamily),
+            textStyle = TextStyle(color = SkyText, fontSize = 16.sp, fontFamily = AppFontFamily),
             cursorBrush = SolidColor(SkyText),
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
@@ -233,8 +233,8 @@ private fun DiscoveredServerRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(server.name, color = SkyText, fontSize = 15.sp, fontFamily = InterFontFamily, fontWeight = FontWeight.Medium)
-        Text(server.httpUrl, color = SkyTextDim, fontSize = 13.sp, fontFamily = InterFontFamily)
+        Text(server.name, color = SkyText, fontSize = 15.sp, fontFamily = AppFontFamily, fontWeight = FontWeight.Medium)
+        Text(server.httpUrl, color = SkyTextDim, fontSize = 13.sp, fontFamily = AppFontFamily)
     }
 }
 
@@ -259,7 +259,7 @@ private fun ActionButton(label: String, onClick: () -> Unit, highlight: Boolean 
             .focusable()
             .padding(horizontal = 24.dp, vertical = 14.dp)
     ) {
-        Text(label, color = SkyText, fontSize = 16.sp, fontWeight = FontWeight.Medium, fontFamily = InterFontFamily)
+        Text(label, color = SkyText, fontSize = 16.sp, fontWeight = FontWeight.Medium, fontFamily = AppFontFamily)
     }
 }
 
@@ -291,13 +291,13 @@ private fun StreamingOption(
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(option.label, color = SkyText, fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = InterFontFamily)
+            Text(option.label, color = SkyText, fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = AppFontFamily)
             if (selected) {
                 Spacer(Modifier.width(10.dp))
-                Text("✓", color = SkyText, fontSize = 16.sp, fontFamily = InterFontFamily)
+                Text("✓", color = SkyText, fontSize = 16.sp, fontFamily = AppFontFamily)
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text(option.description, color = SkyText.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.Light, fontFamily = InterFontFamily)
+        Text(option.description, color = SkyText.copy(alpha = 0.85f), fontSize = 13.sp, fontWeight = FontWeight.Light, fontFamily = AppFontFamily)
     }
 }

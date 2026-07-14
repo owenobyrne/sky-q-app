@@ -197,7 +197,7 @@ fun Sidebar(
             text = "build ${BuildConfig.BUILD_NUMBER}",
             color = SkyTextDim.copy(alpha = 0.35f),
             fontSize = 10.sp,
-            fontFamily = InterFontFamily,
+            fontFamily = AppFontFamily,
             fontWeight = FontWeight.Light,
             modifier = Modifier.padding(start = leftPad, bottom = 10.dp)
         )
@@ -309,7 +309,7 @@ private fun SidebarNavItem(
                 text = label,
                 color = SkyText,
                 fontSize = fontSize.sp,
-                fontFamily = InterFontFamily,
+                fontFamily = AppFontFamily,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Light,
                 modifier = Modifier.padding(start = leftPad, end = 12.dp)
             )
@@ -332,7 +332,7 @@ private fun Clock(fontSize: Float) {
         text = time,
         color = SkyTextDim,
         fontSize = fontSize.sp,
-        fontFamily = InterFontFamily,
+        fontFamily = AppFontFamily,
         fontWeight = FontWeight.Light
     )
 }

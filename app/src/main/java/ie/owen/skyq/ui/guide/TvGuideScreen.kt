@@ -185,7 +185,7 @@ private fun InfoPanel(event: EpgEvent?, modifier: Modifier = Modifier) {
                 text = event.description ?: event.summary ?: event.subtitle ?: "",
                 color = SkyText.copy(alpha = 0.8f),
                 fontSize = cellFont.sp,
-                fontFamily = InterFontFamily,
+                fontFamily = AppFontFamily,
                 fontWeight = FontWeight.Light,
                 maxLines = 6,
                 overflow = TextOverflow.Ellipsis,

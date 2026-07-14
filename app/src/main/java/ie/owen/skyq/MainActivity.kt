@@ -2,15 +2,19 @@ package ie.owen.skyq
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -33,6 +37,8 @@ import ie.owen.skyq.ui.settings.SettingsScreen
 import ie.owen.skyq.ui.shell.AppShell
 import ie.owen.skyq.ui.shell.SidebarBorderOverlay
 import ie.owen.skyq.ui.theme.SkyQTheme
+import ie.owen.skyq.ui.video.BROWSE_PANE_FRACTION
+import ie.owen.skyq.ui.video.BrowsePane
 import ie.owen.skyq.ui.video.ChannelMeta
 import ie.owen.skyq.ui.video.VideoOverlay
 import ie.owen.skyq.ui.video.VideoViewModel
@@ -77,6 +83,9 @@ private fun SkyQApp() {
     var fullscreenMeta  by remember { mutableStateOf<ChannelMeta?>(null) }
     var fullscreenUuid  by remember { mutableStateOf<String?>(null) }
     var osdTrigger      by remember { mutableIntStateOf(0) }
+    var browseOpen      by remember { mutableStateOf(false) }
+    var browseUuid      by remember { mutableStateOf<String?>(null) }
+    var browseMeta      by remember { mutableStateOf<ChannelMeta?>(null) }
     val guideState      by guideViewModel.state.collectAsStateWithLifecycle()
 
     // Up/Down while fullscreen: hop to the previous/next channel in the (tag-filtered)
@@ -95,6 +104,49 @@ private fun SkyQApp() {
         osdTrigger++
     }
 
+    // ── Browse pane (Right in fullscreen): peek at other channels in a live preview
+    // on the left while the main video keeps playing on the right. ──────────────
+    fun previewBrowse(uuid: String, ch: Channel) {
+        browseUuid = uuid
+        browseMeta = channelMeta(ch, guideState.eventsByChannel)
+        videoViewModel.setPreviewChannel(uuid)
+    }
+    fun openBrowse() {
+        val chans = guideState.channels
+        if (chans.isEmpty()) return
+        val curIdx   = chans.indexOfFirst { it.uuid == fullscreenUuid }
+        val startIdx = if (curIdx < 0) 0 else (curIdx + 1) % chans.size
+        previewBrowse(chans[startIdx].uuid, chans[startIdx])
+        browseOpen = true
+    }
+    fun stepBrowse(delta: Int) {
+        val chans = guideState.channels
+        if (chans.isEmpty()) return
+        val curIdx  = chans.indexOfFirst { it.uuid == browseUuid }
+        val nextIdx = if (curIdx < 0) 0 else (curIdx + delta + chans.size) % chans.size
+        previewBrowse(chans[nextIdx].uuid, chans[nextIdx])
+    }
+    fun closeBrowse() {
+        browseOpen = false
+        videoViewModel.stopPreview()
+    }
+    // Enter on the preview: swap the two channels but stay in split view — the browsed
+    // channel becomes the main (right, with audio) and the old main drops into the
+    // preview (left). The main [player] always holds the audio, so no muting is needed.
+    fun swapBrowse() {
+        val newMain    = browseUuid ?: return
+        val newPreview = fullscreenUuid
+        val newMainMeta    = browseMeta
+        val newPreviewMeta = fullscreenMeta
+        fullscreenUuid = newMain
+        fullscreenMeta = newMainMeta
+        browseUuid = newPreview
+        browseMeta = newPreviewMeta
+        AppSettings.setLastChannel(newMain)
+        videoViewModel.setChannel(newMain)
+        newPreview?.let { videoViewModel.setPreviewChannel(it) }
+    }
+
     val density = LocalDensity.current
     val borderAlpha by animateFloatAsState(
         targetValue = if (isFullscreen) 0f else 1f,
@@ -108,15 +160,29 @@ private fun SkyQApp() {
     }
 
     Box(Modifier.fillMaxSize().onPreviewKeyEvent { keyEvent ->
-        // While fullscreen, Up/Down change the channel; every other D-pad key is eaten so
-        // the EPG behind can't receive focus-traversal events (which stall ExoPlayer via
-        // main-thread recompositions).
+        // While fullscreen, the D-pad drives playback (not the EPG behind, whose focus
+        // traversal stalls ExoPlayer via main-thread recompositions), so all of it is eaten.
         if (isFullscreen && keyEvent.type == KeyEventType.KeyDown) {
-            when (keyEvent.key) {
-                Key.DirectionUp   -> { stepChannel(-1); true }
-                Key.DirectionDown -> { stepChannel(+1); true }
-                in DPAD_KEYS      -> true
-                else              -> false
+            if (browseOpen) {
+                // Browse pane: Up/Down change the previewed channel, OK swaps it into the
+                // main (staying in split view), Left closes.
+                when (keyEvent.key) {
+                    Key.DirectionUp                 -> { stepBrowse(-1); true }
+                    Key.DirectionDown               -> { stepBrowse(+1); true }
+                    Key.DirectionCenter, Key.Enter  -> { swapBrowse(); true }
+                    Key.DirectionLeft, Key.Back     -> { closeBrowse(); true }
+                    in DPAD_KEYS                    -> true
+                    else                            -> false
+                }
+            } else {
+                // Plain fullscreen: Right opens the browse pane, Up/Down zap channels.
+                when (keyEvent.key) {
+                    Key.DirectionRight -> { openBrowse(); true }
+                    Key.DirectionUp    -> { stepChannel(-1); true }
+                    Key.DirectionDown  -> { stepChannel(+1); true }
+                    in DPAD_KEYS       -> true
+                    else               -> false
+                }
             }
         } else false
     }) {
@@ -161,8 +227,22 @@ private fun SkyQApp() {
                 previewBounds   = previewBounds,
                 meta            = if (isFullscreen) fullscreenMeta else null,
                 osdTrigger      = osdTrigger,
+                browseOpen      = browseOpen,
                 onBack          = { isFullscreen = false }
             )
+
+            // Left-hand browse pane (over the contracted main video). Composed after
+            // VideoOverlay so its BackHandler takes priority over the fullscreen one.
+            if (browseOpen) {
+                BrowsePane(
+                    player = videoViewModel.previewPlayer,
+                    meta   = browseMeta,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxWidth(BROWSE_PANE_FRACTION)
+                )
+            }
+            BackHandler(enabled = browseOpen) { closeBrowse() }
 
             if (borderAlpha > 0f) {
                 val leftDp  = with(density) { previewBounds.left.toDp() }

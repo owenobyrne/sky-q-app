@@ -62,6 +62,15 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         else DefaultRenderersFactory(application)
     ).build()
 
+    // Second, muted player driving the left-hand browse-preview pane. Audio always
+    // comes from the main [player]; this one only ever renders video. Verified on the
+    // Amlogic Chromecast HD to decode concurrently with the main stream.
+    val previewPlayer: ExoPlayer = ExoPlayer.Builder(
+        application,
+        if (isAmlogicDevice) AmlogicRenderersFactory(application)
+        else DefaultRenderersFactory(application)
+    ).build().apply { volume = 0f }
+
     // UUID of the channel currently loaded (to avoid redundant restarts)
     private var activeUuid: String? = null
     private var pendingUuid: String? = null
@@ -71,6 +80,11 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(TAG, "player error: ${error.errorCodeName} — ${error.message}", error)
+            }
+        })
+        previewPlayer.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e(TAG, "preview player error: ${error.errorCodeName} — ${error.message}", error)
             }
         })
         loadChannelIds()
@@ -146,17 +160,58 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         channelJob?.cancel()
         channelJob = viewModelScope.launch {
             delay(PREVIEW_DEBOUNCE_MS)
-            val source = when (AppSettings.streamingMode.value) {
-                StreamingMode.HLS -> hlsSource(uuid)
-                StreamingMode.HLS_LL -> hlsLlSource(uuid)
-                StreamingMode.HTSP -> htspSource(uuid) ?: run {
-                    Log.w(TAG, "no HTSP ID for uuid=$uuid"); pendingUuid = null; return@launch
-                }
+            val source = buildSource(uuid) ?: run {
+                Log.w(TAG, "no source for uuid=$uuid"); pendingUuid = null; return@launch
             }
             activeUuid = uuid
             pendingUuid = null
             startStream(source)
         }
+    }
+
+    private suspend fun buildSource(uuid: String): MediaSource? =
+        when (AppSettings.streamingMode.value) {
+            StreamingMode.HLS    -> hlsSource(uuid)
+            StreamingMode.HLS_LL -> hlsLlSource(uuid)
+            StreamingMode.HTSP   -> htspSource(uuid)
+        }
+
+    // ── Browse-preview playback ──────────────────────────────────────────────
+    private var previewJob: Job? = null
+    private var previewPendingUuid: String? = null
+
+    /** UUID currently loaded in the preview pane (null when the pane is closed). */
+    var previewUuid: String? = null
+        private set
+
+    /**
+     * Tunes the (muted) preview player to [uuid]. Debounced like [setChannel] so
+     * holding Up/Down through the channel list only starts the stream once focus settles.
+     */
+    fun setPreviewChannel(uuid: String) {
+        if (uuid == previewUuid || uuid == previewPendingUuid) return
+        previewPendingUuid = uuid
+        previewJob?.cancel()
+        previewJob = viewModelScope.launch {
+            delay(PREVIEW_DEBOUNCE_MS)
+            val source = buildSource(uuid) ?: run {
+                Log.w(TAG, "preview: no source for $uuid"); previewPendingUuid = null; return@launch
+            }
+            previewUuid = uuid
+            previewPendingUuid = null
+            previewPlayer.setMediaSource(source)
+            previewPlayer.prepare()
+            previewPlayer.playWhenReady = true
+        }
+    }
+
+    /** Stops and frees the preview decoder (call when the browse pane closes). */
+    fun stopPreview() {
+        previewJob?.cancel()
+        previewPendingUuid = null
+        previewUuid = null
+        previewPlayer.stop()
+        previewPlayer.clearMediaItems()
     }
 
     /** Resolves the numeric HTSP channel ID (waiting briefly for the async map). */
@@ -202,5 +257,8 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
     fun pause()       = htspFactory.controller.pause()
     fun resume()      = htspFactory.controller.resume()
 
-    override fun onCleared() = player.release()
+    override fun onCleared() {
+        player.release()
+        previewPlayer.release()
+    }
 }

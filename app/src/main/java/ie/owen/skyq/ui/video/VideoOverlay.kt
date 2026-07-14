@@ -198,8 +198,9 @@ fun VideoOverlay(
         Box(
             modifier = Modifier
                 .absoluteOffset(leftDp, topDp)
-                .size(widthDp, heightDp)
-                .background(Color.Black),
+                .size(widthDp, heightDp),
+            // No background: the video letterbox area stays transparent so the blue wash
+            // shows through the bars above/below the (16:9) video while browsing.
             contentAlignment = Alignment.Center
         ) {
             if (isAmlogicDevice) {

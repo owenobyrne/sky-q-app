@@ -65,6 +65,9 @@ private val OsdShape      = RoundedCornerShape(8.dp)
 private val OsdBackground = Color(0xCC1E2020)
 private val OsdBorder     = Color(0x55CCCCCC)
 
+/** Fraction of the screen width taken by the left browse pane (main video keeps the rest). */
+const val BROWSE_PANE_FRACTION = 1f / 3f
+
 @Composable
 fun VideoOverlay(
     player: ExoPlayer,
@@ -72,6 +75,7 @@ fun VideoOverlay(
     previewBounds: Rect,
     meta: ChannelMeta?,
     osdTrigger: Int = 0,
+    browseOpen: Boolean = false,
     onBack: () -> Unit
 ) {
     val config  = LocalConfiguration.current
@@ -82,7 +86,9 @@ fun VideoOverlay(
     val videoSpec = tween<Float>(durationMillis = 380, easing = FastOutSlowInEasing)
     val scrimSpec = tween<Float>(durationMillis = 180)
 
-    val left   by animateFloatAsState(if (isFullscreen) 0f else previewBounds.left,  videoSpec, label = "vL")
+    // When the browse pane is open, the main video contracts to the right two-thirds.
+    val fsLeft = if (browseOpen) screenW * BROWSE_PANE_FRACTION else 0f
+    val left   by animateFloatAsState(if (isFullscreen) fsLeft else previewBounds.left,  videoSpec, label = "vL")
     val top    by animateFloatAsState(if (isFullscreen) 0f else previewBounds.top,   videoSpec, label = "vT")
     val right  by animateFloatAsState(if (isFullscreen) screenW else previewBounds.right,  videoSpec, label = "vR")
     val bottom by animateFloatAsState(if (isFullscreen) screenH else previewBounds.bottom, videoSpec, label = "vB")
@@ -170,7 +176,8 @@ fun VideoOverlay(
             modifier = Modifier
                 .absoluteOffset(leftDp, topDp)
                 .size(widthDp, heightDp)
-                .background(Color.Black)
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
         ) {
             if (isAmlogicDevice) {
                 // SurfaceView lets the Amlogic decoder hand frames directly to SurfaceFlinger,
@@ -198,7 +205,8 @@ fun VideoOverlay(
                             player.setVideoSurfaceView(sv)
                         }
                     },
-                    modifier = Modifier.fillMaxSize()
+                    // Letterbox to 16:9 within the (possibly non-16:9) video box.
+                    modifier = Modifier.aspectRatio(16f / 9f)
                 )
             } else {
                 // TextureView composites in the normal View layer — no hole-punch, safe on
@@ -224,7 +232,8 @@ fun VideoOverlay(
                             player.setVideoTextureView(tv)
                         }
                     },
-                    modifier = Modifier.fillMaxSize()
+                    // Letterbox to 16:9 within the (possibly non-16:9) video box.
+                    modifier = Modifier.aspectRatio(16f / 9f)
                 )
             }
 
@@ -243,7 +252,7 @@ fun VideoOverlay(
             }
         }
 
-        if (isFullscreen && meta != null) {
+        if (isFullscreen && !browseOpen && meta != null) {
             AnimatedVisibility(
                 visible = osdVisible,
                 enter = fadeIn(tween(300)),

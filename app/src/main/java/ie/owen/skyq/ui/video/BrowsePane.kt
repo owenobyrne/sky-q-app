@@ -96,7 +96,8 @@ fun BrowsePane(
         }
 
         // Now-playing info for the previewed channel, sitting directly on the blue wash.
-        Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
+        // Small horizontal inset so the text isn't flush with the video edges.
+        Column(Modifier.fillMaxWidth().padding(top = 14.dp, start = 10.dp, end = 10.dp)) {
             if (meta == null) {
                 Text("Browsing…", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
                 return@Column

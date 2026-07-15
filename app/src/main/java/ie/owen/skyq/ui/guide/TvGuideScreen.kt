@@ -88,16 +88,16 @@ fun TvGuideScreen(
     }
 
     val config = LocalConfiguration.current
-    val topRowHeight = (config.screenHeightDp * 0.42f).dp
+    val topRowHeight = (config.screenHeightDp * 0.38f).dp
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Top section — preview + details, with the clock/settings overlaid top-right so they
-        // don't push the preview down.
+        // don't push the preview down. Preview left edge aligns with the grid's channel names.
         Box(modifier = Modifier.fillMaxWidth().height(topRowHeight)) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 40.dp, end = 40.dp, top = 14.dp, bottom = 10.dp),
+                    .padding(start = 12.dp, end = 40.dp, top = 16.dp, bottom = 16.dp),
                 verticalAlignment = Alignment.Top
             ) {
                 Box(
@@ -114,7 +114,7 @@ fun TvGuideScreen(
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 14.dp, end = 40.dp),
+                    .padding(top = 16.dp, end = 40.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Clock()

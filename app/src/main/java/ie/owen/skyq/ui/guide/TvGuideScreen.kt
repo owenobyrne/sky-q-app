@@ -88,14 +88,14 @@ fun TvGuideScreen(
     }
 
     val config = LocalConfiguration.current
-    val topRowHeight = (config.screenHeightDp * 0.30f).dp
+    val topRowHeight = (config.screenHeightDp * 0.40f).dp
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Top bar — clock + settings, top right.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 40.dp, end = 40.dp, top = 18.dp, bottom = 4.dp),
+                .padding(start = 40.dp, end = 40.dp, top = 12.dp, bottom = 0.dp),
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -109,8 +109,8 @@ fun TvGuideScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(topRowHeight)
-                .padding(horizontal = 40.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(start = 40.dp, end = 40.dp, top = 0.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.Top
         ) {
             Box(
                 modifier = Modifier

@@ -276,7 +276,7 @@ fun VideoOverlay(
                         Spacer(Modifier.width(10.dp))
                         Text(
                             meta.title,
-                            color = Color.White.copy(alpha = 0.55f),
+                            color = Color.White.copy(alpha = 0.75f),
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis

@@ -8,11 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalConfiguration
@@ -26,10 +23,6 @@ import coil.compose.AsyncImage
 import ie.owen.skyq.data.api.TvHeadendClient
 import ie.owen.skyq.data.model.EpgEvent
 import ie.owen.skyq.ui.theme.*
-
-private val dropShadow = TextStyle(
-    shadow = Shadow(color = Color.Black.copy(alpha = 0.85f), offset = Offset(1f, 2f), blurRadius = 2f)
-)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -146,10 +139,10 @@ private fun InfoPanel(event: EpgEvent?, modifier: Modifier = Modifier) {
                         text = event.title,
                         color = SkyText,
                         fontSize = 28.sp,
+                        fontFamily = AppFontFamily,
                         fontWeight = FontWeight.Normal,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = dropShadow
+                        overflow = TextOverflow.Ellipsis
                     )
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -160,7 +153,7 @@ private fun InfoPanel(event: EpgEvent?, modifier: Modifier = Modifier) {
                             event.starRating?.takeIf { it > 0 }?.let { add("★".repeat(it.coerceAtMost(5))) }
                             event.copyrightYear?.let { add(it.toString()) }
                         }.joinToString(" · ")
-                        Text(metaText, color = SkyTextDim, fontSize = 15.sp, style = dropShadow)
+                        Text(metaText, color = SkyTextDim, fontSize = 15.sp, fontFamily = AppFontFamily)
                         if (event.isLive) {
                             Spacer(Modifier.width(10.dp))
                             LiveBadge()
@@ -188,11 +181,10 @@ private fun InfoPanel(event: EpgEvent?, modifier: Modifier = Modifier) {
                 fontFamily = AppFontFamily,
                 fontWeight = FontWeight.Light,
                 maxLines = 6,
-                overflow = TextOverflow.Ellipsis,
-                style = dropShadow
+                overflow = TextOverflow.Ellipsis
             )
         } else {
-            Text("TV Guide", color = SkyText, fontSize = 26.sp, fontWeight = FontWeight.Bold, style = dropShadow)
+            Text("TV Guide", color = SkyText, fontSize = 26.sp, fontWeight = FontWeight.Bold, fontFamily = AppFontFamily)
         }
     }
 }
@@ -219,6 +211,6 @@ private fun LiveBadge() {
             .background(SkyLiveBadge)
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text("LIVE", color = SkyText, fontSize = 11.sp, fontWeight = FontWeight.Bold, style = dropShadow)
+        Text("LIVE", color = SkyText, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = AppFontFamily)
     }
 }

@@ -24,7 +24,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -49,10 +48,6 @@ import ie.owen.skyq.data.model.EpgEvent
 import ie.owen.skyq.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
-
-private val dropShadow = TextStyle(
-    shadow = Shadow(color = Color.Black.copy(alpha = 0.85f), offset = Offset(1f, 2f), blurRadius = 2f)
-)
 
 private const val DP_PER_MINUTE = 7f
 private const val WINDOW_HOURS = 24
@@ -121,15 +116,13 @@ fun EpgGrid(
     val cellTextStyleNormal = remember(cellFont) {
         TextStyle(
             color = SkyText, fontSize = cellFont.sp, fontFamily = AppFontFamily,
-            fontWeight = FontWeight.Normal,
-            shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(1f, 2f), 2f)
+            fontWeight = FontWeight.Normal
         )
     }
     val cellTextStyleLight = remember(cellFont) {
         TextStyle(
             color = SkyText, fontSize = cellFont.sp, fontFamily = AppFontFamily,
-            fontWeight = FontWeight.Light,
-            shadow = Shadow(Color.Black.copy(alpha = 0.85f), Offset(1f, 2f), 2f)
+            fontWeight = FontWeight.Light
         )
     }
 
@@ -161,8 +154,7 @@ fun EpgGrid(
                     fontSize = cellFont.sp,
                     fontFamily = AppFontFamily,
                     fontWeight = FontWeight.Light,
-                    modifier = Modifier.padding(start = 12.dp),
-                    style = dropShadow
+                    modifier = Modifier.padding(start = 12.dp)
                 )
             }
             Row(
@@ -187,8 +179,7 @@ fun EpgGrid(
                             fontSize = cellFont.sp,
                             fontFamily = AppFontFamily,
                             fontWeight = FontWeight.Light,
-                            modifier = Modifier.padding(start = 8.dp),
-                            style = dropShadow
+                            modifier = Modifier.padding(start = 8.dp)
                         )
                     }
                 }

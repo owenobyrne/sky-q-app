@@ -1,15 +1,22 @@
 package ie.owen.skyq.ui.guide
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalConfiguration
@@ -20,15 +27,21 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import ie.owen.skyq.R
 import ie.owen.skyq.data.api.TvHeadendClient
 import ie.owen.skyq.data.model.EpgEvent
 import ie.owen.skyq.ui.theme.*
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun TvGuideScreen(
     onChannelSelected: (uuid: String, name: String, number: String, title: String, iconPath: String, startTime: Long?, stopTime: Long?, description: String?) -> Unit,
     onPreviewChannelChanged: (channelUuid: String) -> Unit = {},
+    onPreviewBoundsChanged: (Rect) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
     viewModel: TvGuideViewModel
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -42,8 +55,6 @@ fun TvGuideScreen(
     val onEventFocused: (EpgEvent?) -> Unit = remember { viewModel::onEventFocused }
     val latestOnChannelSelected by rememberUpdatedState(onChannelSelected)
     val latestOnPreviewChanged by rememberUpdatedState(onPreviewChannelChanged)
-    // Held as a State object (not a delegated var) so the remember{} lambda below can read and
-    // write it without a stale closure.
     val pendingChannelUuid = remember { mutableStateOf<String?>(null) }
     val onEventSelected: (EpgEvent) -> Unit = remember {
         { event ->
@@ -76,20 +87,50 @@ fun TvGuideScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        InfoPanel(
-            event = focusedEvent,
-            modifier = Modifier.fillMaxWidth().weight(0.38f)
-        )
+    val config = LocalConfiguration.current
+    val topRowHeight = (config.screenHeightDp * 0.30f).dp
 
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Top bar — clock + settings, top right.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 40.dp, end = 40.dp, top = 18.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Clock()
+            Spacer(Modifier.width(20.dp))
+            SettingsButton(onOpenSettings)
+        }
+
+        // Preview video (rounded rect, positioned by VideoOverlay) + selected programme details.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(topRowHeight)
+                .padding(horizontal = 40.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(16f / 9f)
+                    .onGloballyPositioned { onPreviewBoundsChanged(it.boundsInRoot()) }
+            )
+            Spacer(Modifier.width(28.dp))
+            InfoPanel(event = focusedEvent, modifier = Modifier.weight(1f).fillMaxHeight())
+        }
+
+        // EPG grid — full width along the bottom.
         when {
             state.isLoading -> {
-                Box(Modifier.weight(0.62f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             }
             state.error != null -> {
-                Box(Modifier.weight(0.62f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text("Failed to load: ${state.error}", color = SkyTextDim)
                 }
             }
@@ -102,7 +143,7 @@ fun TvGuideScreen(
                     onEventSelected = onEventSelected,
                     onChannelSelected = onChannelDirectSelected,
                     initialChannelUuid = viewModel.initialChannelUuid,
-                    modifier = Modifier.weight(0.62f)
+                    modifier = Modifier.fillMaxWidth().weight(1f)
                 )
             }
         }
@@ -111,13 +152,51 @@ fun TvGuideScreen(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
+private fun Clock() {
+    var time by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        val fmt = SimpleDateFormat("h:mma", Locale.getDefault())
+        while (true) {
+            time = fmt.format(Date()).lowercase().replace(".", "")
+            kotlinx.coroutines.delay(30_000)
+        }
+    }
+    Text(
+        text = time,
+        color = SkyText.copy(alpha = 0.85f),
+        fontSize = 18.sp,
+        fontFamily = AppFontFamily,
+        fontWeight = FontWeight.Light
+    )
+}
+
+@Composable
+private fun SettingsButton(onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = if (focused) 0.22f else 0.08f))
+            .onFocusChanged { focused = it.isFocused }
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            painter = painterResource(R.drawable.ic_settings),
+            contentDescription = "Settings",
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
 private fun InfoPanel(event: EpgEvent?, modifier: Modifier = Modifier) {
-    val cellFont = LocalConfiguration.current.screenHeightDp * 0.025f
+    val cellFont = LocalConfiguration.current.screenHeightDp * 0.023f
     Column(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.28f))
-            .padding(horizontal = 28.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.Top,
+        modifier = modifier,
+        verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.Start
     ) {
         if (event != null) {
@@ -130,15 +209,13 @@ private fun InfoPanel(event: EpgEvent?, modifier: Modifier = Modifier) {
                         AsyncImage(
                             model = TvHeadendClient.resolveUrl(event.channelIcon),
                             contentDescription = event.channelName,
-                            modifier = Modifier
-                                .size(58.dp)
-                                .padding(bottom = 3.dp)
+                            modifier = Modifier.size(52.dp).padding(bottom = 4.dp)
                         )
                     }
                     Text(
                         text = event.title,
                         color = SkyText,
-                        fontSize = 28.sp,
+                        fontSize = 30.sp,
                         fontFamily = AppFontFamily,
                         fontWeight = FontWeight.Normal,
                         maxLines = 1,
@@ -161,30 +238,28 @@ private fun InfoPanel(event: EpgEvent?, modifier: Modifier = Modifier) {
                     }
                 }
                 if (event.image != null) {
-                    Spacer(Modifier.width(16.dp))
+                    Spacer(Modifier.width(20.dp))
                     AsyncImage(
                         model = event.image,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .height(96.dp)
+                            .height(104.dp)
                             .aspectRatio(16f / 9f)
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(10.dp))
                     )
                 }
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Text(
                 text = event.description ?: event.summary ?: event.subtitle ?: "",
                 color = SkyText.copy(alpha = 0.8f),
                 fontSize = cellFont.sp,
                 fontFamily = AppFontFamily,
                 fontWeight = FontWeight.Light,
-                maxLines = 6,
+                maxLines = 4,
                 overflow = TextOverflow.Ellipsis
             )
-        } else {
-            Text("TV Guide", color = SkyText, fontSize = 26.sp, fontWeight = FontWeight.Bold, fontFamily = AppFontFamily)
         }
     }
 }
@@ -208,6 +283,7 @@ private fun dvbGenreLabel(code: Int): String? = when (code ushr 4) {
 private fun LiveBadge() {
     Box(
         modifier = Modifier
+            .clip(RoundedCornerShape(3.dp))
             .background(SkyLiveBadge)
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {

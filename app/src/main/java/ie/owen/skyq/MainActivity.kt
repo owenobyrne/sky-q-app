@@ -4,27 +4,22 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ie.owen.skyq.data.model.Channel
 import ie.owen.skyq.data.model.EpgEvent
@@ -34,8 +29,6 @@ import ie.owen.skyq.ui.guide.TvGuideScreen
 import ie.owen.skyq.ui.guide.TvGuideViewModel
 import ie.owen.skyq.ui.home.HomeScreen
 import ie.owen.skyq.ui.settings.SettingsScreen
-import ie.owen.skyq.ui.shell.AppShell
-import ie.owen.skyq.ui.shell.SidebarBorderOverlay
 import ie.owen.skyq.ui.theme.SkyQTheme
 import ie.owen.skyq.ui.video.BROWSE_PANE_FRACTION
 import ie.owen.skyq.ui.video.BrowsePane
@@ -147,19 +140,15 @@ private fun SkyQApp() {
         newPreview?.let { videoViewModel.setPreviewChannel(it) }
     }
 
-    val density = LocalDensity.current
-    val borderAlpha by animateFloatAsState(
-        targetValue = if (isFullscreen) 0f else 1f,
-        animationSpec = tween(durationMillis = 380, easing = FastOutSlowInEasing),
-        label = "borderAlpha"
-    )
-
-    // Auto-tune to the last channel on startup (starts the sidebar preview).
+    // Auto-tune to the last channel on startup (starts the preview).
     LaunchedEffect(Unit) {
         AppSettings.lastChannelUuid?.let { videoViewModel.setChannel(it) }
     }
 
-    Box(Modifier.fillMaxSize().onPreviewKeyEvent { keyEvent ->
+    Box(Modifier
+        .fillMaxSize()
+        .background(Brush.horizontalGradient(0f to Color(0xFF011799), 1f to Color(0xFF0051FB)))
+        .onPreviewKeyEvent { keyEvent ->
         // While fullscreen, the D-pad drives playback (not the EPG behind, whose focus
         // traversal stalls ExoPlayer via main-thread recompositions), so all of it is eaten.
         if (isFullscreen && keyEvent.type == KeyEventType.KeyDown) {
@@ -186,41 +175,32 @@ private fun SkyQApp() {
             }
         } else false
     }) {
-        AppShell(
-            selectedNav = selectedNav,
-            onNavSelect = { dest ->
-                selectedNav = dest
-                when (dest) {
-                    is NavDestination.Tag   -> guideViewModel.setTagFilter(dest.uuid)
-                    is NavDestination.Guide -> guideViewModel.setTagFilter(null)
-                    else                    -> Unit
-                }
-            },
-            tags = guideState.tags,
-            onPreviewBoundsChanged = { previewBounds = it },
-            isFullscreen = isFullscreen
-        ) {
-            when (val nav = selectedNav) {
-                is NavDestination.Guide,
-                is NavDestination.Tag -> TvGuideScreen(
-                    viewModel = guideViewModel,
-                    onChannelSelected = { uuid, name, number, title, iconPath, startTime, stopTime, description ->
-                        AppSettings.setLastChannel(uuid)
-                        videoViewModel.setChannel(uuid)
-                        fullscreenMeta = ChannelMeta(name, number, title, iconPath, startTime, stopTime, description)
-                        fullscreenUuid = uuid
-                        isFullscreen = true
-                    },
-                    onPreviewChannelChanged = { uuid ->
-                        videoViewModel.setChannel(uuid)
-                    }
-                )
-                is NavDestination.Settings -> SettingsScreen()
-                else -> HomeScreen()
-            }
+        val onGuide = selectedNav is NavDestination.Guide || selectedNav is NavDestination.Tag
+
+        when (selectedNav) {
+            is NavDestination.Guide,
+            is NavDestination.Tag -> TvGuideScreen(
+                viewModel = guideViewModel,
+                onChannelSelected = { uuid, name, number, title, iconPath, startTime, stopTime, description ->
+                    AppSettings.setLastChannel(uuid)
+                    videoViewModel.setChannel(uuid)
+                    fullscreenMeta = ChannelMeta(name, number, title, iconPath, startTime, stopTime, description)
+                    fullscreenUuid = uuid
+                    isFullscreen = true
+                },
+                onPreviewChannelChanged = { uuid -> videoViewModel.setChannel(uuid) },
+                onPreviewBoundsChanged = { previewBounds = it },
+                onOpenSettings = { selectedNav = NavDestination.Settings }
+            )
+            is NavDestination.Settings -> SettingsScreen()
+            else -> HomeScreen()
         }
 
-        if (previewBounds.width > 0f) {
+        // Back out of Settings/Home returns to the guide.
+        BackHandler(enabled = !onGuide) { selectedNav = NavDestination.Guide }
+
+        // Preview / fullscreen video — only over the guide.
+        if (onGuide && previewBounds.width > 0f) {
             VideoOverlay(
                 player          = videoViewModel.player,
                 isFullscreen    = isFullscreen,
@@ -243,19 +223,6 @@ private fun SkyQApp() {
                 onBack          = { isFullscreen = false }
             )
             BackHandler(enabled = browseOpen) { closeBrowse() }
-
-            if (borderAlpha > 0f) {
-                val leftDp  = with(density) { previewBounds.left.toDp() }
-                val topDp   = with(density) { previewBounds.top.toDp() }
-                val widthDp = with(density) { previewBounds.width.toDp() }
-                val heightDp = with(density) { previewBounds.height.toDp() }
-                SidebarBorderOverlay(
-                    modifier = Modifier
-                        .absoluteOffset(leftDp, topDp)
-                        .size(widthDp, heightDp)
-                        .graphicsLayer { alpha = borderAlpha }
-                )
-            }
         }
     }
 }

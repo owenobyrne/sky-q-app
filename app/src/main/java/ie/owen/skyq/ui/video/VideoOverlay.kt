@@ -114,9 +114,11 @@ fun VideoOverlay(
     val blueBaseAlpha  by animateFloatAsState(if (isFullscreen) 1f else 0f, scrimSpec, label = "blueBase")
     val blackScrimAlpha by animateFloatAsState(if (isFullscreen && !browseOpen) 1f else 0f, scrimSpec, label = "blackScrim")
 
-    // Rounded corners + drop shadow only while the main video is shrunken for browsing.
-    val cornerRadius by animateDpAsState(if (browseOpen) BrowseCornerRadius else 0.dp, tween(380, easing = FastOutSlowInEasing), label = "corner")
-    val elevation    by animateDpAsState(if (browseOpen) BrowseElevation else 0.dp, tween(380, easing = FastOutSlowInEasing), label = "elev")
+    // Rounded corners + drop shadow whenever the video is shrunken (guide preview or browse
+    // pane); square and flat only when truly fullscreen.
+    val shrunken = !isFullscreen || browseOpen
+    val cornerRadius by animateDpAsState(if (shrunken) BrowseCornerRadius else 0.dp, tween(380, easing = FastOutSlowInEasing), label = "corner")
+    val elevation    by animateDpAsState(if (shrunken) BrowseElevation else 0.dp, tween(380, easing = FastOutSlowInEasing), label = "elev")
     val cornerRadiusPx = with(density) { cornerRadius.toPx() }
 
     val widthDp  = with(density) { (right - left).toDp() }

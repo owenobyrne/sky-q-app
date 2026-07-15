@@ -22,7 +22,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
@@ -53,6 +52,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import ie.owen.skyq.data.api.TvHeadendClient
+import ie.owen.skyq.ui.theme.AppFontFamily
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,10 +67,6 @@ data class ChannelMeta(
     val stopTime: Long? = null,
     val description: String? = null
 )
-
-private val OsdShape      = RoundedCornerShape(8.dp)
-private val OsdBackground = Color(0xCC1E2020)
-private val OsdBorder     = Color(0x55CCCCCC)
 
 /** Fraction of the screen width taken by the left browse pane (main video keeps the rest). */
 const val BROWSE_PANE_FRACTION = 1f / 3f
@@ -196,9 +192,9 @@ fun VideoOverlay(
         }
     }
 
-    val hMargin    = (config.screenWidthDp  * 0.10f).dp
-    val osdHeight  = (config.screenHeightDp * 0.40f).dp
-    val osdVMargin = (config.screenHeightDp * 0.08f).dp
+    val osdGradientHeight = (config.screenHeightDp * 0.55f).dp
+    val osdHPadding       = (config.screenWidthDp  * 0.045f).dp
+    val osdBottomPadding  = (config.screenHeightDp * 0.06f).dp
 
     Box(Modifier.fillMaxSize()) {
         // Blue wash base — the EPG-style background the browse pane sits on.
@@ -298,9 +294,28 @@ fun VideoOverlay(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    .padding(start = hMargin, end = hMargin, bottom = osdVMargin)
             ) {
-                Box(Modifier.fillMaxWidth().height(osdHeight)) { ChannelOsd(meta) }
+                // Translucent gradient (transparent → black) at the bottom of the screen;
+                // the now-playing info sits on it directly, no box.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(osdGradientHeight)
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                1f to Color.Black.copy(alpha = 0.88f)
+                            )
+                        ),
+                    contentAlignment = Alignment.BottomStart
+                ) {
+                    ChannelOsd(
+                        meta = meta,
+                        modifier = Modifier.padding(
+                            start = osdHPadding, end = osdHPadding, bottom = osdBottomPadding
+                        )
+                    )
+                }
             }
         }
     }
@@ -390,69 +405,64 @@ private fun LoadingSpinner() {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ChannelOsd(meta: ChannelMeta) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(OsdBackground, OsdShape)
-            .border(1.5.dp, OsdBorder, OsdShape)
-            .padding(horizontal = 24.dp, vertical = 16.dp)
-    ) {
+private fun ChannelOsd(meta: ChannelMeta, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
         // Channel row: icon + name + number
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (meta.iconPath.isNotEmpty()) {
                 AsyncImage(
                     model = TvHeadendClient.resolveUrl(meta.iconPath),
                     contentDescription = meta.name,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(30.dp)
                 )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(12.dp))
             }
-            Text(meta.name, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Text(meta.name, color = Color.White, fontSize = 17.sp, fontFamily = AppFontFamily, fontWeight = FontWeight.Medium)
             if (meta.number.isNotEmpty()) {
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(10.dp))
                 Text(
                     text = meta.number,
                     color = Color.White.copy(alpha = 0.55f),
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(bottom = 1.dp)
+                    fontSize = 14.sp,
+                    fontFamily = AppFontFamily
                 )
             }
         }
 
         Spacer(Modifier.height(10.dp))
 
-        // Programme title
+        // Programme title — large & light
         if (meta.title.isNotEmpty()) {
             Text(
                 text = meta.title,
                 color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 44.sp,
+                fontFamily = AppFontFamily,
+                fontWeight = FontWeight.Light,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
 
         // Description
         if (!meta.description.isNullOrEmpty()) {
             Text(
                 text = meta.description,
                 color = Color.White.copy(alpha = 0.80f),
-                fontSize = 14.sp,
+                fontSize = 15.sp,
+                fontFamily = AppFontFamily,
                 fontWeight = FontWeight.Light,
-                maxLines = 7,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
-                lineHeight = 20.sp
+                lineHeight = 21.sp
             )
         }
 
-        Spacer(Modifier.weight(1f))
-
         // Progress bar + start/end times
         if (meta.startTime != null && meta.stopTime != null) {
+            Spacer(Modifier.height(18.dp))
             val now = System.currentTimeMillis() / 1000L
             val progress = ((now - meta.startTime).toFloat() /
                     (meta.stopTime - meta.startTime).toFloat()).coerceIn(0f, 1f)
@@ -465,9 +475,10 @@ private fun ChannelOsd(meta: ChannelMeta) {
                     text = formatOsdTime(meta.startTime),
                     color = Color.White.copy(alpha = 0.60f),
                     fontSize = 12.sp,
+                    fontFamily = AppFontFamily,
                     fontWeight = FontWeight.Light
                 )
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(14.dp))
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -482,11 +493,12 @@ private fun ChannelOsd(meta: ChannelMeta) {
                             .background(Color.White.copy(alpha = 0.75f))
                     )
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(14.dp))
                 Text(
                     text = formatOsdTime(meta.stopTime),
                     color = Color.White.copy(alpha = 0.60f),
                     fontSize = 12.sp,
+                    fontFamily = AppFontFamily,
                     fontWeight = FontWeight.Light
                 )
             }

@@ -88,38 +88,39 @@ fun TvGuideScreen(
     }
 
     val config = LocalConfiguration.current
-    val topRowHeight = (config.screenHeightDp * 0.40f).dp
+    val topRowHeight = (config.screenHeightDp * 0.42f).dp
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Top bar — clock + settings, top right.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 40.dp, end = 40.dp, top = 12.dp, bottom = 0.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Clock()
-            Spacer(Modifier.width(20.dp))
-            SettingsButton(onOpenSettings)
-        }
-
-        // Preview video (rounded rect, positioned by VideoOverlay) + selected programme details.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(topRowHeight)
-                .padding(start = 40.dp, end = 40.dp, top = 0.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Box(
+        // Top section — preview + details, with the clock/settings overlaid top-right so they
+        // don't push the preview down.
+        Box(modifier = Modifier.fillMaxWidth().height(topRowHeight)) {
+            Row(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .aspectRatio(16f / 9f)
-                    .onGloballyPositioned { onPreviewBoundsChanged(it.boundsInRoot()) }
-            )
-            Spacer(Modifier.width(28.dp))
-            InfoPanel(event = focusedEvent, modifier = Modifier.weight(1f).fillMaxHeight())
+                    .fillMaxSize()
+                    .padding(start = 40.dp, end = 40.dp, top = 14.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .aspectRatio(16f / 9f)
+                        .onGloballyPositioned { onPreviewBoundsChanged(it.boundsInRoot()) }
+                )
+                Spacer(Modifier.width(28.dp))
+                InfoPanel(event = focusedEvent, modifier = Modifier.weight(1f).fillMaxHeight())
+            }
+
+            // Clock + settings — overlaid in the top-right corner.
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 14.dp, end = 40.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Clock()
+                Spacer(Modifier.width(20.dp))
+                SettingsButton(onOpenSettings)
+            }
         }
 
         // EPG grid — full width along the bottom.
@@ -196,7 +197,7 @@ private fun InfoPanel(event: EpgEvent?, modifier: Modifier = Modifier) {
     val cellFont = LocalConfiguration.current.screenHeightDp * 0.023f
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.Center,
+        verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.Start
     ) {
         if (event != null) {

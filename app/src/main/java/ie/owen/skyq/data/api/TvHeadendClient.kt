@@ -70,12 +70,13 @@ object TvHeadendClient {
         "${baseUrl}hls/channel/$channelUuid.m3u8?profile=hls-ll"
 
     /**
-     * Low-resolution (~384p H264/AAC MPEG-TS) stream for the browse-preview pane, so the
-     * second decoder is far lighter than the HD main stream and the two don't stutter.
-     * webtv-h264-aac-mpegts is an existing TVHeadend transcode profile.
+     * Low-resolution H264/AAC MPEG-TS stream for the browse-preview pane, so the second
+     * decoder is far lighter than the HD main stream and the two don't stutter. Uses the
+     * `preview-lowres` NVENC transcode profile — NVENC (GPU) handles the HDHomeRun/Saorview
+     * source that the earlier software-x264 profile (webtv-h264-aac-mpegts) failed on.
      */
     fun buildPreviewUrl(channelUuid: String) =
-        "${baseUrl}stream/channel/$channelUuid?profile=webtv-h264-aac-mpegts"
+        "${baseUrl}stream/channel/$channelUuid?profile=preview-lowres"
 
     fun resolveUrl(path: String): String =
         if (path.startsWith("http")) path else "$baseUrl$path"

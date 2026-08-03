@@ -3,7 +3,6 @@ package ie.owen.skyq.ui.guide
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ie.owen.skyq.data.model.Channel
-import ie.owen.skyq.data.model.ChannelTagEntry
 import ie.owen.skyq.data.model.EpgEvent
 import ie.owen.skyq.data.repository.EpgRepository
 import ie.owen.skyq.data.settings.AppSettings
@@ -15,11 +14,9 @@ import kotlinx.coroutines.withContext
 
 data class TvGuideUiState(
     val channels: List<Channel> = emptyList(),
-    val allChannels: List<Channel> = emptyList(),
     val eventsByChannel: Map<String, List<EpgEvent>> = emptyMap(),
     /** Grid cells (programmes + gap fillers), pre-built off the main thread. */
     val cellsByChannel: Map<String, List<EpgCell>> = emptyMap(),
-    val tags: List<ChannelTagEntry> = emptyList(),
     val windowStart: Long = defaultWindowStart(),
     val initialChannelUuid: String? = null,
     val previewChannelUuid: String? = null,
@@ -35,8 +32,6 @@ private fun defaultWindowStart(): Long {
 class TvGuideViewModel : ViewModel() {
 
     private val repository = EpgRepository()
-
-    private var activeTagUuid: String? = null
 
     private val _state = MutableStateFlow(TvGuideUiState())
     val state: StateFlow<TvGuideUiState> = _state
@@ -79,13 +74,10 @@ class TvGuideViewModel : ViewModel() {
                                 ?: data.eventsByChannel[ch.uuid]?.firstOrNull()
                         }
                     }
-                    val filtered = filterChannels(data.channels, activeTagUuid)
                     _state.value = TvGuideUiState(
-                        channels = filtered,
-                        allChannels = data.channels,
+                        channels = data.channels,
                         eventsByChannel = data.eventsByChannel,
                         cellsByChannel = cells,
-                        tags = data.tags,
                         windowStart = windowStart,
                         initialChannelUuid = initialChannelUuid,
                         previewChannelUuid = _state.value.previewChannelUuid
@@ -126,15 +118,4 @@ class TvGuideViewModel : ViewModel() {
     fun onEventFocused(event: EpgEvent?) {
         _focusedEvent.value = event
     }
-
-    fun setTagFilter(tagUuid: String?) {
-        activeTagUuid = tagUuid
-        val all = _state.value.allChannels
-        if (all.isEmpty()) return
-        _focusedEvent.value = null
-        _state.value = _state.value.copy(channels = filterChannels(all, tagUuid))
-    }
-
-    private fun filterChannels(channels: List<Channel>, tagUuid: String?) =
-        if (tagUuid == null) channels else channels.filter { tagUuid in it.tags }
 }

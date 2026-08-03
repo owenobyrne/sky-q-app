@@ -1,16 +1,12 @@
 package ie.owen.skyq.data.api
 
 import ie.owen.skyq.data.model.ChannelGridResponse
-import ie.owen.skyq.data.model.ChannelTagListResponse
 import ie.owen.skyq.data.model.EpgGridResponse
 import ie.owen.skyq.data.model.ServiceGridResponse
 import retrofit2.http.GET
 import retrofit2.http.Query
 
 interface TvHeadendApi {
-
-    @GET("api/channeltag/list")
-    suspend fun getChannelTags(): ChannelTagListResponse
 
     @GET("api/channel/grid")
     suspend fun getChannels(

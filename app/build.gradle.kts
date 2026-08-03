@@ -62,12 +62,10 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-text-google-fonts")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
 
     // Compose TV
-    implementation("androidx.tv:tv-foundation:1.0.0")
     implementation("androidx.tv:tv-material:1.1.0")
 
     // Activity + ViewModel
@@ -75,14 +73,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
 
-    // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.7")
-
-    // Media3 / ExoPlayer
+    // Media3 / ExoPlayer — no media3-ui: playback renders into our own
+    // SurfaceView/TextureView (see VideoOverlay.VideoSurface), not a PlayerView.
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.10.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.10.1")
-    implementation("androidx.media3:media3-ui:1.10.1")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

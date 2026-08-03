@@ -26,7 +26,6 @@ import ie.owen.skyq.data.settings.AppSettings
 import ie.owen.skyq.navigation.NavDestination
 import ie.owen.skyq.ui.guide.TvGuideScreen
 import ie.owen.skyq.ui.guide.TvGuideViewModel
-import ie.owen.skyq.ui.home.HomeScreen
 import ie.owen.skyq.ui.settings.SettingsScreen
 import ie.owen.skyq.ui.theme.SkyQTheme
 import ie.owen.skyq.ui.video.BROWSE_PANE_FRACTION
@@ -182,11 +181,10 @@ private fun SkyQApp() {
             }
         } else false
     }) {
-        val onGuide = selectedNav is NavDestination.Guide || selectedNav is NavDestination.Tag
+        val onGuide = selectedNav is NavDestination.Guide
 
         when (selectedNav) {
-            is NavDestination.Guide,
-            is NavDestination.Tag -> TvGuideScreen(
+            is NavDestination.Guide -> TvGuideScreen(
                 viewModel = guideViewModel,
                 onChannelSelected = { uuid, name, number, title, iconPath, startTime, stopTime, description ->
                     AppSettings.setLastChannel(uuid)
@@ -200,10 +198,9 @@ private fun SkyQApp() {
                 onOpenSettings = { selectedNav = NavDestination.Settings }
             )
             is NavDestination.Settings -> SettingsScreen()
-            else -> HomeScreen()
         }
 
-        // Back out of Settings/Home returns to the guide.
+        // Back out of Settings returns to the guide.
         BackHandler(enabled = !onGuide) { selectedNav = NavDestination.Guide }
 
         // Preview / fullscreen video — only over the guide.

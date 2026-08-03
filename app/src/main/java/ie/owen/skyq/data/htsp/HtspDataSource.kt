@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG          = "HtspDS"
 private const val PIPE_SIZE    = 512 * 1024
-private const val TIMESHIFT_S  = 7200          // 2-hour timeshift buffer
 private const val STREAM_PROFILE = "mp2-audio-to-aac-lc"  // TVHeadend transcode profile (video copy, audio→AAC-LC)
 
 // ─── Timeshift state ─────────────────────────────────────────────────────────

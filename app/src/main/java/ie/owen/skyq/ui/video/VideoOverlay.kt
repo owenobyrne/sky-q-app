@@ -74,7 +74,7 @@ const val BROWSE_PANE_FRACTION = 1f / 3f
  *  so the blue wash peeks behind it. */
 private const val BROWSE_MAIN_RIGHT_INSET = 0.01f
 
-// Blue wash shown behind the browse pane — matches the AppShell / EPG background gradient.
+// Blue wash shown behind the browse pane — matches the EPG background gradient.
 private val BrowseWash = Brush.horizontalGradient(0f to Color(0xFF011799), 1f to Color(0xFF0051FB))
 
 // While browsing, the (shrunken) main video gets rounded corners and a soft drop shadow.
@@ -203,7 +203,7 @@ fun VideoOverlay(
         if (blueBaseAlpha > 0f) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = blueBaseAlpha }.background(BrowseWash))
         }
-        // Black scrim over the wash — fades in so AppShell disappears behind the growing
+        // Black scrim over the wash — fades in so the guide disappears behind the growing
         // video, and fades away (revealing the blue wash) while browsing.
         if (blackScrimAlpha > 0f) {
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = blackScrimAlpha)))

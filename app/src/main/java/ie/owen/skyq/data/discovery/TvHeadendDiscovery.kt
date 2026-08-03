@@ -19,17 +19,25 @@ class TvHeadendDiscovery(private val context: Context) {
         override fun toString() = "$name  [$host:$port]"
     }
 
-    private val probeClient = OkHttpClient.Builder()
-        .connectTimeout(500, TimeUnit.MILLISECONDS)
-        .readTimeout(1, TimeUnit.SECONDS)
-        .build()
+    // Lazy so constructing a TvHeadendDiscovery (which happens on the caller's dispatcher)
+    // never builds an OkHttpClient on the main thread.
+    private val probeClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(500, TimeUnit.MILLISECONDS)
+            .readTimeout(1, TimeUnit.SECONDS)
+            .build()
+    }
 
-    suspend fun scan(): List<Server> {
-        val localIp = localIpAddress() ?: return emptyList()
+    /**
+     * Sweeps the local /24 for a TVHeadend server. Runs entirely on IO — [localIpAddress]
+     * is a binder call into system_server, which must not happen on the main thread.
+     */
+    suspend fun scan(): List<Server> = withContext(Dispatchers.IO) {
+        val localIp = localIpAddress() ?: return@withContext emptyList()
         val subnet  = localIp.substringBeforeLast(".")
-        return coroutineScope {
+        coroutineScope {
             (1..254).map { i ->
-                async(Dispatchers.IO) { probe("$subnet.$i", 9981) }
+                async { probe("$subnet.$i", 9981) }
             }.mapNotNull { it.await() }
         }
     }

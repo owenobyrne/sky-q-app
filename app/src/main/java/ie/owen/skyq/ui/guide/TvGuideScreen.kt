@@ -138,12 +138,12 @@ fun TvGuideScreen(
             else -> {
                 EpgGrid(
                     channels = state.channels,
-                    eventsByChannel = state.eventsByChannel,
+                    cellsByChannel = state.cellsByChannel,
                     windowStart = state.windowStart,
                     onEventFocused = onEventFocused,
                     onEventSelected = onEventSelected,
                     onChannelSelected = onChannelDirectSelected,
-                    initialChannelUuid = viewModel.initialChannelUuid,
+                    initialChannelUuid = state.initialChannelUuid,
                     modifier = Modifier.fillMaxWidth().weight(1f)
                 )
             }

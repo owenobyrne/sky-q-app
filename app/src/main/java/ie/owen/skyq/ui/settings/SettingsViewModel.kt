@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
+    // Seeded from whatever is loaded so far, then filled in once the (background) settings
+    // load completes — they're Compose state, so the fields update themselves.
     var host     by mutableStateOf(AppSettings.serverHost)
     var port     by mutableStateOf(AppSettings.serverPort.toString())
     var username by mutableStateOf(AppSettings.username)
@@ -29,6 +31,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     private val _saved = MutableStateFlow(false)
     val saved: StateFlow<Boolean> = _saved
+
+    init {
+        if (!AppSettings.isReady) {
+            viewModelScope.launch {
+                AppSettings.awaitReady()
+                host     = AppSettings.serverHost
+                port     = AppSettings.serverPort.toString()
+                username = AppSettings.username
+                password = AppSettings.password
+            }
+        }
+    }
 
     fun scan() {
         _discovered.value = emptyList()

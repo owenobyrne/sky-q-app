@@ -57,6 +57,10 @@ class HtspController {
     private var conn: HtspConnection? = null
     private var subId: Int = -1
 
+    // pause()/resume() are driven from UI key handlers on the main thread, but the
+    // subscriptionSpeed message is a blocking socket write — it goes out on IO.
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     internal fun bind(connection: HtspConnection, subscriptionId: Int) {
         conn  = connection
         subId = subscriptionId
@@ -85,12 +89,17 @@ class HtspController {
 
     private fun speed(value: Int) {
         val c = conn ?: return
-        if (subId < 0) return
-        c.send(htspMsg(
-            "method"         to "subscriptionSpeed",
-            "subscriptionId" to subId.toLong(),
-            "speed"          to value.toLong()
-        ))
+        val id = subId
+        if (id < 0) return
+        ioScope.launch {
+            runCatching {
+                c.send(htspMsg(
+                    "method"         to "subscriptionSpeed",
+                    "subscriptionId" to id.toLong(),
+                    "speed"          to value.toLong()
+                ))
+            }.onFailure { Log.w(TAG, "subscriptionSpeed failed: ${it.message}") }
+        }
     }
 }
 

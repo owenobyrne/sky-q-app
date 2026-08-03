@@ -50,7 +50,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 private const val DP_PER_MINUTE = 7f
-private const val WINDOW_HOURS = 24
+internal const val WINDOW_HOURS = 24
 private val HEADER_HEIGHT: Dp = 36.dp
 
 // Pre-allocated draw colours — avoids Color object allocation on every frame
@@ -72,7 +72,8 @@ data class EpgCell(
 @Composable
 fun EpgGrid(
     channels: List<Channel>,
-    eventsByChannel: Map<String, List<EpgEvent>>,
+    /** Pre-built off the main thread by [TvGuideViewModel] — never build cells in composition. */
+    cellsByChannel: Map<String, List<EpgCell>>,
     windowStart: Long,
     onEventFocused: (EpgEvent?) -> Unit,
     onEventSelected: (EpgEvent) -> Unit,
@@ -110,6 +111,21 @@ fun EpgGrid(
     }
     val hPadPx      = remember(density) { with(density) { 8.dp.toPx() } }
     val selStrokePx = remember(density) { with(density) { 2.dp.toPx() } }
+
+    // Shared single-cell filler for channels with no events in the window — one instance
+    // for the whole grid rather than one allocation per empty row.
+    val emptyRowCells = remember(windowStart, windowEnd) {
+        buildCells(emptyList(), windowStart, windowEnd)
+    }
+
+    // Header tick labels: built once per window instead of allocating 48 SimpleDateFormats
+    // on every recomposition of the grid.
+    val tickLabels = remember(windowStart, totalMinutes) {
+        val fmt = SimpleDateFormat("h:mma", Locale.getDefault())
+        List(totalMinutes / 30) { i ->
+            fmt.format(Date((windowStart + i * 30 * 60L) * 1000)).lowercase().replace(".", "")
+        }
+    }
 
     // Two text styles (normal/light) pre-built so Canvas draw doesn't allocate per frame
     val textMeasurer = rememberTextMeasurer(cacheSize = 256)
@@ -163,9 +179,7 @@ fun EpgGrid(
                     .fillMaxHeight()
                     .horizontalScroll(horizontalScroll)
             ) {
-                val tickCount = totalMinutes / 30
-                repeat(tickCount) { i ->
-                    val tickUnix = windowStart + i * 30 * 60L
+                tickLabels.forEach { label ->
                     Box(
                         modifier = Modifier
                             .width((30 * DP_PER_MINUTE).dp)
@@ -174,7 +188,7 @@ fun EpgGrid(
                         contentAlignment = Alignment.CenterStart
                     ) {
                         Text(
-                            text = formatTime(tickUnix),
+                            text = label,
                             color = SkyTextDim,
                             fontSize = cellFont.sp,
                             fontFamily = AppFontFamily,
@@ -189,10 +203,7 @@ fun EpgGrid(
         // Channel rows — LazyColumn virtualises vertically; Canvas virtualises horizontally
         LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
             items(channels, key = { it.uuid }) { channel ->
-                val rawEvents = eventsByChannel[channel.uuid] ?: emptyList()
-                val cells = remember(rawEvents, windowStart, windowEnd) {
-                    buildCells(rawEvents, windowStart, windowEnd)
-                }
+                val cells = cellsByChannel[channel.uuid] ?: emptyRowCells
                 val isRowFocused by remember(channel.uuid) {
                     derivedStateOf { focusedChannelUuid.value == channel.uuid }
                 }
@@ -430,7 +441,14 @@ private fun ChannelCell(
     }
 }
 
-private fun buildCells(
+/**
+ * Expands a channel's events into a gap-filled cell list covering the whole window.
+ *
+ * Called from [TvGuideViewModel] on a background dispatcher — do **not** call it from
+ * composition: it filters, sorts and allocates per channel, and the guide rebuilds it for
+ * every channel that changes on each progressive EPG emission.
+ */
+internal fun buildCells(
     events: List<EpgEvent>,
     windowStart: Long,
     windowEnd: Long
@@ -462,9 +480,4 @@ private fun buildCells(
     }
 
     return cells
-}
-
-private fun formatTime(unixSeconds: Long): String {
-    val fmt = SimpleDateFormat("h:mma", Locale.getDefault())
-    return fmt.format(Date(unixSeconds * 1000)).lowercase().replace(".", "")
 }

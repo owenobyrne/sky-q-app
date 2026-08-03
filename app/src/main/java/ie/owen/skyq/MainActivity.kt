@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.*
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
@@ -79,19 +78,25 @@ private fun SkyQApp() {
     var browseOpen      by remember { mutableStateOf(false) }
     var browseUuid      by remember { mutableStateOf<String?>(null) }
     var browseMeta      by remember { mutableStateOf<ChannelMeta?>(null) }
-    val guideState      by guideViewModel.state.collectAsStateWithLifecycle()
+
+    // The guide state is read imperatively from the key handlers below rather than collected
+    // into Compose state. Collecting it here would recompose this entire tree — guide,
+    // VideoOverlay and all — on every progressive EPG emission, which is exactly when the
+    // user is trying to navigate.
+    fun guideState() = guideViewModel.state.value
 
     // Up/Down while fullscreen: hop to the previous/next channel in the (tag-filtered)
     // guide list, wrapping at the ends. Retunes, refreshes the info OSD from the new
     // channel's live event, and persists the choice as the last channel.
     fun stepChannel(delta: Int) {
-        val chans = guideState.channels
+        val state = guideState()
+        val chans = state.channels
         if (chans.isEmpty()) return
         val curIdx  = chans.indexOfFirst { it.uuid == fullscreenUuid }
         val nextIdx = if (curIdx < 0) 0 else (curIdx + delta + chans.size) % chans.size
         val ch = chans[nextIdx]
         fullscreenUuid = ch.uuid
-        fullscreenMeta = channelMeta(ch, guideState.eventsByChannel)
+        fullscreenMeta = channelMeta(ch, state.eventsByChannel)
         AppSettings.setLastChannel(ch.uuid)
         videoViewModel.setChannel(ch.uuid)
         osdTrigger++
@@ -101,11 +106,11 @@ private fun SkyQApp() {
     // on the left while the main video keeps playing on the right. ──────────────
     fun previewBrowse(uuid: String, ch: Channel) {
         browseUuid = uuid
-        browseMeta = channelMeta(ch, guideState.eventsByChannel)
+        browseMeta = channelMeta(ch, guideState().eventsByChannel)
         videoViewModel.setPreviewChannel(uuid)
     }
     fun openBrowse() {
-        val chans = guideState.channels
+        val chans = guideState().channels
         if (chans.isEmpty()) return
         val curIdx   = chans.indexOfFirst { it.uuid == fullscreenUuid }
         val startIdx = if (curIdx < 0) 0 else (curIdx + 1) % chans.size
@@ -113,7 +118,7 @@ private fun SkyQApp() {
         browseOpen = true
     }
     fun stepBrowse(delta: Int) {
-        val chans = guideState.channels
+        val chans = guideState().channels
         if (chans.isEmpty()) return
         val curIdx  = chans.indexOfFirst { it.uuid == browseUuid }
         val nextIdx = if (curIdx < 0) 0 else (curIdx + delta + chans.size) % chans.size
@@ -140,8 +145,10 @@ private fun SkyQApp() {
         newPreview?.let { videoViewModel.setPreviewChannel(it) }
     }
 
-    // Auto-tune to the last channel on startup (starts the preview).
+    // Auto-tune to the last channel on startup (starts the preview). Settings load off the
+    // main thread, so wait for them rather than reading a not-yet-populated value.
     LaunchedEffect(Unit) {
+        AppSettings.awaitReady()
         AppSettings.lastChannelUuid?.let { videoViewModel.setChannel(it) }
     }
 

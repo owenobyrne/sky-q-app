@@ -15,6 +15,13 @@ import kotlinx.coroutines.Dispatchers
 private const val TAG = "EpgLoad"
 private const val EPG_CHUNK = 500
 
+/**
+ * Minimum gap between progressive emissions while the remaining EPG chunks stream in.
+ * Each emission recomposes the whole guide, so emitting once per 500-event chunk (~20 times
+ * for a full grid) starves the main thread exactly while the user is trying to navigate.
+ */
+private const val EMIT_INTERVAL_MS = 750L
+
 data class GuideData(
     val channels: List<Channel>,
     val eventsByChannel: Map<String, List<EpgEvent>>,
@@ -69,12 +76,33 @@ class EpgRepository {
             Triple(channelsDeferred.await(), tagsDeferred.await(), epgDeferred.await())
         }
 
-        val allEvents = firstChunk.entries.toMutableList()
-        emit(GuideData(channels, toWindowMap(allEvents, windowStart, windowEnd), tags))
+        val allEvents = ArrayList<EpgEvent>(firstChunk.totalCount.coerceIn(EPG_CHUNK, 20_000))
+
+        // Per-channel window map built up incrementally. Channels that gain no events in a
+        // chunk keep their *existing List instance*, so the grid's per-row `remember(cells)`
+        // stays valid and those rows are not re-laid-out on every progressive emission.
+        val byChannel = HashMap<String, List<EpgEvent>>()
+
+        fun merge(chunk: List<EpgEvent>): Boolean {
+            val inWindow = chunk.filter { it.stop > windowStart && it.start < windowEnd }
+            if (inWindow.isEmpty()) return false
+            for ((uuid, added) in inWindow.groupBy { it.channelUuid }) {
+                val existing = byChannel[uuid]
+                byChannel[uuid] = if (existing == null) added else existing + added
+            }
+            return true
+        }
+
+        allEvents.addAll(firstChunk.entries)
+        merge(firstChunk.entries)
+        emit(GuideData(channels, HashMap(byChannel), tags))
         Log.d(TAG, "+${System.currentTimeMillis() - t0}ms  first emit — ${channels.size} channels, ${allEvents.size} events fetched")
 
-        // Fetch remaining EPG chunks in background
+        // Fetch remaining EPG chunks in background, coalescing emissions so the UI thread
+        // isn't asked to rebuild the guide once per network round-trip.
         var offset = allEvents.size
+        var lastEmit = System.currentTimeMillis()
+        var dirty = false
         val total = firstChunk.totalCount
         while (offset < total) {
             val t = System.currentTimeMillis()
@@ -82,10 +110,19 @@ class EpgRepository {
             Log.d(TAG, "+${System.currentTimeMillis() - t}ms  EPG chunk $offset: ${chunk.entries.size} events")
             if (chunk.entries.isEmpty()) break
             allEvents.addAll(chunk.entries)
-            emit(GuideData(channels, toWindowMap(allEvents, windowStart, windowEnd), tags))
+            if (merge(chunk.entries)) dirty = true
+
+            val now = System.currentTimeMillis()
+            if (dirty && now - lastEmit >= EMIT_INTERVAL_MS) {
+                emit(GuideData(channels, HashMap(byChannel), tags))
+                lastEmit = now
+                dirty = false
+            }
+
             if (chunk.entries.all { it.start >= windowEnd }) break
             offset += chunk.entries.size
         }
+        if (dirty) emit(GuideData(channels, HashMap(byChannel), tags))
 
         cachedChannels = channels
         cachedEvents = allEvents.toList()

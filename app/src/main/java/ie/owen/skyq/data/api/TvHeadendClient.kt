@@ -1,5 +1,6 @@
 package ie.owen.skyq.data.api
 
+import ie.owen.skyq.BuildConfig
 import ie.owen.skyq.data.settings.AppSettings
 import okhttp3.Authenticator
 import okhttp3.OkHttpClient
@@ -43,9 +44,13 @@ object TvHeadendClient {
             .authenticator(DigestAuthenticator(builtUser, builtPass))
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
-            .addInterceptor(HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
-            })
+            .apply {
+                if (BuildConfig.DEBUG) {
+                    addInterceptor(HttpLoggingInterceptor().apply {
+                        level = HttpLoggingInterceptor.Level.BASIC
+                    })
+                }
+            }
             .build()
         _okHttpClient = client
         _api = Retrofit.Builder()

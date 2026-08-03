@@ -7,16 +7,21 @@ import ie.owen.skyq.data.model.ChannelTagEntry
 import ie.owen.skyq.data.model.EpgEvent
 import ie.owen.skyq.data.repository.EpgRepository
 import ie.owen.skyq.data.settings.AppSettings
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class TvGuideUiState(
     val channels: List<Channel> = emptyList(),
     val allChannels: List<Channel> = emptyList(),
     val eventsByChannel: Map<String, List<EpgEvent>> = emptyMap(),
+    /** Grid cells (programmes + gap fillers), pre-built off the main thread. */
+    val cellsByChannel: Map<String, List<EpgCell>> = emptyMap(),
     val tags: List<ChannelTagEntry> = emptyList(),
     val windowStart: Long = defaultWindowStart(),
+    val initialChannelUuid: String? = null,
     val previewChannelUuid: String? = null,
     val isLoading: Boolean = true,
     val error: String? = null
@@ -31,8 +36,6 @@ class TvGuideViewModel : ViewModel() {
 
     private val repository = EpgRepository()
 
-    val initialChannelUuid: String? = AppSettings.lastChannelUuid
-
     private var activeTagUuid: String? = null
 
     private val _state = MutableStateFlow(TvGuideUiState())
@@ -41,6 +44,12 @@ class TvGuideViewModel : ViewModel() {
     private val _focusedEvent = MutableStateFlow<EpgEvent?>(null)
     val focusedEvent: StateFlow<EpgEvent?> = _focusedEvent
 
+    // Previous emission's inputs/outputs, used to reuse cell lists for channels whose events
+    // didn't change between progressive emissions. Only touched from the single collect
+    // coroutine below, so no synchronisation is needed.
+    private var lastEventsByChannel: Map<String, List<EpgEvent>> = emptyMap()
+    private var lastCellsByChannel: Map<String, List<EpgCell>> = emptyMap()
+
     init {
         load()
     }
@@ -48,10 +57,19 @@ class TvGuideViewModel : ViewModel() {
     fun load() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, error = null)
+            // Credentials/host load off the main thread at startup — wait for them before
+            // hitting the API, otherwise the first request goes to a blank host.
+            AppSettings.awaitReady()
+            val initialChannelUuid = AppSettings.lastChannelUuid
             val windowStart = defaultWindowStart()
-            val windowEnd = windowStart + 24 * 60 * 60L
+            val windowEnd = windowStart + WINDOW_HOURS * 3600L
             try {
                 repository.getGuideDataFlow(windowStart, windowEnd).collect { data ->
+                    // buildCells filters + sorts + fills gaps for every channel. Doing it
+                    // here (on Default) rather than inside LazyColumn item composition keeps
+                    // it off the main thread entirely.
+                    val cells = buildCellsByChannel(data.eventsByChannel, windowStart, windowEnd)
+
                     if (_focusedEvent.value == null) {
                         val startCh = initialChannelUuid
                             ?.let { uuid -> data.channels.firstOrNull { it.uuid == uuid } }
@@ -66,8 +84,10 @@ class TvGuideViewModel : ViewModel() {
                         channels = filtered,
                         allChannels = data.channels,
                         eventsByChannel = data.eventsByChannel,
+                        cellsByChannel = cells,
                         tags = data.tags,
                         windowStart = windowStart,
+                        initialChannelUuid = initialChannelUuid,
                         previewChannelUuid = _state.value.previewChannelUuid
                             ?: initialChannelUuid?.takeIf { uuid -> data.channels.any { it.uuid == uuid } }
                             ?: data.channels.firstOrNull()?.uuid,
@@ -78,6 +98,29 @@ class TvGuideViewModel : ViewModel() {
                 _state.value = _state.value.copy(isLoading = false, error = e.message)
             }
         }
+    }
+
+    /**
+     * Builds the per-channel cell lists on [Dispatchers.Default], reusing the previous list
+     * instance for any channel whose event list is unchanged. That keeps both the CPU cost
+     * and the recomposition scope of a progressive emission proportional to what actually
+     * changed rather than to the size of the whole grid.
+     */
+    private suspend fun buildCellsByChannel(
+        eventsByChannel: Map<String, List<EpgEvent>>,
+        windowStart: Long,
+        windowEnd: Long
+    ): Map<String, List<EpgCell>> = withContext(Dispatchers.Default) {
+        val prevEvents = lastEventsByChannel
+        val prevCells  = lastCellsByChannel
+        val out = HashMap<String, List<EpgCell>>(eventsByChannel.size)
+        for ((uuid, events) in eventsByChannel) {
+            val reusable = if (prevEvents[uuid] === events) prevCells[uuid] else null
+            out[uuid] = reusable ?: buildCells(events, windowStart, windowEnd)
+        }
+        lastEventsByChannel = eventsByChannel
+        lastCellsByChannel = out
+        out
     }
 
     fun onEventFocused(event: EpgEvent?) {

@@ -28,7 +28,9 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.onSubscription
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG                 = "VideoVM"
 private const val PREVIEW_DEBOUNCE_MS = 400L
@@ -36,46 +38,72 @@ private const val PREVIEW_DEBOUNCE_MS = 400L
 @UnstableApi
 class VideoViewModel(application: Application) : AndroidViewModel(application) {
 
-    // Channel ID lookup: uuid (HTTP API) → numeric HTSP channel ID
-    private val channelIdMap = mutableMapOf<String, Long>()
+    // Channel ID lookup: uuid (HTTP API) → numeric HTSP channel ID.
+    // Concurrent: filled by the HTSP metadata coroutine, read by whichever IO thread is
+    // building a media source.
+    private val channelIdMap = ConcurrentHashMap<String, Long>()
 
-    // Recreated lazily each access so settings changes take effect on next channel switch
-    private val htspFactory: HtspDataSource.Factory
-        get() = HtspDataSource.Factory(
+    // Rebuilt only when the server config actually changes. It must be cached rather than
+    // recreated per access: the factory owns the HtspController that the active subscription
+    // binds itself to, so handing out a fresh one would leave pause/resume (and the UI's
+    // timeshift state) talking to a controller with no connection.
+    private data class HtspConfig(val host: String, val port: Int, val user: String, val pass: String)
+
+    @Volatile private var cachedHtspFactory: HtspDataSource.Factory? = null
+    private var htspBuiltFor: HtspConfig? = null
+
+    @Synchronized
+    private fun htspFactory(): HtspDataSource.Factory {
+        val config = HtspConfig(
             AppSettings.serverHost,
             AppSettings.serverPort + 1,   // HTSP is always HTTP port + 1
             AppSettings.username,
             AppSettings.password
         )
+        cachedHtspFactory?.takeIf { htspBuiltFor == config }?.let { return it }
+        htspBuiltFor = config
+        return HtspDataSource.Factory(config.host, config.port, config.user, config.pass)
+            .also { cachedHtspFactory = it }
+    }
 
     /** Exposed so the UI can read isPaused / timeBehindLiveSec. */
-    val timeshiftController: HtspController get() = htspFactory.controller
+    val timeshiftController: HtspController get() = htspFactory().controller
 
-    private val htspSourceFactory =
-        ProgressiveMediaSource.Factory(htspFactory, DefaultExtractorsFactory())
-    private val hlsSourceFactory =
-        HlsMediaSource.Factory(OkHttpDataSource.Factory(TvHeadendClient.authenticatedOkHttpClient()))
-    // Progressive MPEG-TS source for the low-res browse preview (webtv-h264-aac-mpegts).
-    private val previewSourceFactory =
-        ProgressiveMediaSource.Factory(
-            OkHttpDataSource.Factory(TvHeadendClient.authenticatedOkHttpClient()),
-            DefaultExtractorsFactory()
-        )
+    // All three are lazy so the OkHttp/Retrofit/Media3 factory graph is built on the IO
+    // dispatcher inside buildSource(), not on the main thread while the ViewModel is
+    // constructed during the first composition.
+    private val okHttpDataSourceFactory by lazy {
+        OkHttpDataSource.Factory(TvHeadendClient.authenticatedOkHttpClient())
+    }
+    private val hlsSourceFactory by lazy { HlsMediaSource.Factory(okHttpDataSourceFactory) }
+    // Progressive MPEG-TS source for the low-res browse preview (preview-lowres).
+    private val previewSourceFactory by lazy {
+        ProgressiveMediaSource.Factory(okHttpDataSourceFactory, DefaultExtractorsFactory())
+    }
 
-    val player: ExoPlayer = ExoPlayer.Builder(
-        application,
-        if (isAmlogicDevice) AmlogicRenderersFactory(application)
-        else DefaultRenderersFactory(application)
-    ).build()
+    private fun rendererFactory(app: Application): DefaultRenderersFactory =
+        if (isAmlogicDevice) AmlogicRenderersFactory(app) else DefaultRenderersFactory(app)
+
+    val player: ExoPlayer = ExoPlayer.Builder(application, rendererFactory(application)).build()
 
     // Second, muted player driving the left-hand browse-preview pane. Audio always
     // comes from the main [player]; this one only ever renders video. Verified on the
     // Amlogic Chromecast HD to decode concurrently with the main stream.
-    val previewPlayer: ExoPlayer = ExoPlayer.Builder(
-        application,
-        if (isAmlogicDevice) AmlogicRenderersFactory(application)
-        else DefaultRenderersFactory(application)
-    ).build().apply { volume = 0f }
+    //
+    // Built lazily: the browse pane is opened by an explicit user action, so there's no
+    // reason to pay a second ExoPlayer construction on the startup critical path.
+    private val previewPlayerDelegate = lazy {
+        val app = getApplication<Application>()
+        ExoPlayer.Builder(app, rendererFactory(app)).build().apply {
+            volume = 0f
+            addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    Log.e(TAG, "preview player error: ${error.errorCodeName} — ${error.message}", error)
+                }
+            })
+        }
+    }
+    val previewPlayer: ExoPlayer by previewPlayerDelegate
 
     // UUID of the channel currently loaded (to avoid redundant restarts)
     private var activeUuid: String? = null
@@ -86,11 +114,6 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         player.addListener(object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(TAG, "player error: ${error.errorCodeName} — ${error.message}", error)
-            }
-        })
-        previewPlayer.addListener(object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) {
-                Log.e(TAG, "preview player error: ${error.errorCodeName} — ${error.message}", error)
             }
         })
         loadChannelIds()
@@ -110,6 +133,7 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun loadChannelIds() {
         viewModelScope.launch(Dispatchers.IO) {
+            AppSettings.awaitReady()
             val conn = HtspConnection(AppSettings.serverHost, AppSettings.serverPort + 1, AppSettings.username, AppSettings.password)
             try {
                 if (!conn.connect()) { Log.w(TAG, "channel-ID fetch: connect failed"); return@launch }
@@ -166,6 +190,7 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         channelJob?.cancel()
         channelJob = viewModelScope.launch {
             delay(PREVIEW_DEBOUNCE_MS)
+            AppSettings.awaitReady()
             val source = buildSource(uuid) ?: run {
                 Log.w(TAG, "no source for uuid=$uuid"); pendingUuid = null; return@launch
             }
@@ -175,12 +200,18 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun buildSource(uuid: String): MediaSource? =
+    /**
+     * Media-source construction pulls in the OkHttp/Retrofit/Media3 factories (and, for HTSP,
+     * waits on the channel-ID map), so it runs on IO. Only the resulting
+     * `setMediaSource`/`prepare` call goes back to the main thread.
+     */
+    private suspend fun buildSource(uuid: String): MediaSource? = withContext(Dispatchers.IO) {
         when (AppSettings.streamingMode.value) {
             StreamingMode.HLS    -> hlsSource(uuid)
             StreamingMode.HLS_LL -> hlsLlSource(uuid)
             StreamingMode.HTSP   -> htspSource(uuid)
         }
+    }
 
     // ── Browse-preview playback ──────────────────────────────────────────────
     private var previewJob: Job? = null
@@ -200,10 +231,13 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         previewJob?.cancel()
         previewJob = viewModelScope.launch {
             delay(PREVIEW_DEBOUNCE_MS)
+            AppSettings.awaitReady()
             // Always the low-res MPEG-TS transcode — keeps the second decoder light.
-            val source = previewSourceFactory.createMediaSource(
-                MediaItem.fromUri(TvHeadendClient.buildPreviewUrl(uuid))
-            )
+            val source = withContext(Dispatchers.IO) {
+                previewSourceFactory.createMediaSource(
+                    MediaItem.fromUri(TvHeadendClient.buildPreviewUrl(uuid))
+                )
+            }
             previewUuid = uuid
             previewPendingUuid = null
             previewPlayer.setMediaSource(source)
@@ -217,6 +251,7 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         previewJob?.cancel()
         previewPendingUuid = null
         previewUuid = null
+        if (!previewPlayerDelegate.isInitialized()) return
         previewPlayer.stop()
         previewPlayer.clearMediaItems()
     }
@@ -227,9 +262,8 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
             while (channelIdMap[uuid] == null) delay(100)
             channelIdMap[uuid]
         } ?: return null
-        return htspSourceFactory.createMediaSource(
-            MediaItem.fromUri(HtspDataSource.channelUri(id))
-        )
+        return ProgressiveMediaSource.Factory(htspFactory(), DefaultExtractorsFactory())
+            .createMediaSource(MediaItem.fromUri(HtspDataSource.channelUri(id)))
     }
 
     private fun hlsSource(uuid: String): MediaSource =
@@ -260,12 +294,12 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         player.playWhenReady = true
     }
 
-    fun togglePause() = htspFactory.controller.togglePause()
-    fun pause()       = htspFactory.controller.pause()
-    fun resume()      = htspFactory.controller.resume()
+    fun togglePause() = htspFactory().controller.togglePause()
+    fun pause()       = htspFactory().controller.pause()
+    fun resume()      = htspFactory().controller.resume()
 
     override fun onCleared() {
         player.release()
-        previewPlayer.release()
+        if (previewPlayerDelegate.isInitialized()) previewPlayer.release()
     }
 }

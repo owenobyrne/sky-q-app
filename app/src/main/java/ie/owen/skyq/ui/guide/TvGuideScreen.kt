@@ -136,10 +136,9 @@ fun TvGuideScreen(
                 }
             }
             else -> {
-                EpgGrid(
+                NowNextList(
                     channels = state.channels,
-                    cellsByChannel = state.cellsByChannel,
-                    windowStart = state.windowStart,
+                    nowNextByChannel = state.nowNextByChannel,
                     onEventFocused = onEventFocused,
                     onEventSelected = onEventSelected,
                     onChannelSelected = onChannelDirectSelected,

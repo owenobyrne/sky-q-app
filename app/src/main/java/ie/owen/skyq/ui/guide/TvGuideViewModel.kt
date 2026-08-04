@@ -7,17 +7,21 @@ import ie.owen.skyq.data.model.EpgEvent
 import ie.owen.skyq.data.repository.EpgRepository
 import ie.owen.skyq.data.settings.AppSettings
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** The currently-airing programme and the one after it for a single channel. */
+data class NowNext(val now: EpgEvent?, val next: EpgEvent?)
+
 data class TvGuideUiState(
     val channels: List<Channel> = emptyList(),
     val eventsByChannel: Map<String, List<EpgEvent>> = emptyMap(),
-    /** Grid cells (programmes + gap fillers), pre-built off the main thread. */
-    val cellsByChannel: Map<String, List<EpgCell>> = emptyMap(),
-    val windowStart: Long = defaultWindowStart(),
+    /** Current + next programme per channel, pre-computed off the main thread so the
+     *  Now/Next rows never scan event lists during composition or on every keypress. */
+    val nowNextByChannel: Map<String, NowNext> = emptyMap(),
     val initialChannelUuid: String? = null,
     val previewChannelUuid: String? = null,
     val isLoading: Boolean = true,
@@ -39,14 +43,14 @@ class TvGuideViewModel : ViewModel() {
     private val _focusedEvent = MutableStateFlow<EpgEvent?>(null)
     val focusedEvent: StateFlow<EpgEvent?> = _focusedEvent
 
-    // Previous emission's inputs/outputs, used to reuse cell lists for channels whose events
-    // didn't change between progressive emissions. Only touched from the single collect
-    // coroutine below, so no synchronisation is needed.
+    // Most recent per-channel event map, kept so the minute-ticker can recompute now/next
+    // from it without re-fetching. Only touched from coroutines on viewModelScope, which are
+    // confined to the main dispatcher for the assignment, so no synchronisation is needed.
     private var lastEventsByChannel: Map<String, List<EpgEvent>> = emptyMap()
-    private var lastCellsByChannel: Map<String, List<EpgCell>> = emptyMap()
 
     init {
         load()
+        startClockTick()
     }
 
     fun load() {
@@ -60,25 +64,24 @@ class TvGuideViewModel : ViewModel() {
             val windowEnd = windowStart + WINDOW_HOURS * 3600L
             try {
                 repository.getGuideDataFlow(windowStart, windowEnd).collect { data ->
-                    // buildCells filters + sorts + fills gaps for every channel. Doing it
-                    // here (on Default) rather than inside LazyColumn item composition keeps
-                    // it off the main thread entirely.
-                    val cells = buildCellsByChannel(data.eventsByChannel, windowStart, windowEnd)
+                    // Resolve each channel's now/next here (on Default) rather than inside
+                    // LazyColumn item composition, so scrolling and Up/Down keypresses never
+                    // scan event lists on the main thread.
+                    val nowNext = buildNowNextByChannel(data.eventsByChannel)
 
                     if (_focusedEvent.value == null) {
                         val startCh = initialChannelUuid
                             ?.let { uuid -> data.channels.firstOrNull { it.uuid == uuid } }
                             ?: data.channels.firstOrNull()
                         _focusedEvent.value = startCh?.let { ch ->
-                            data.eventsByChannel[ch.uuid]?.firstOrNull { it.isLive }
+                            nowNext[ch.uuid]?.let { it.now ?: it.next }
                                 ?: data.eventsByChannel[ch.uuid]?.firstOrNull()
                         }
                     }
                     _state.value = TvGuideUiState(
                         channels = data.channels,
                         eventsByChannel = data.eventsByChannel,
-                        cellsByChannel = cells,
-                        windowStart = windowStart,
+                        nowNextByChannel = nowNext,
                         initialChannelUuid = initialChannelUuid,
                         previewChannelUuid = _state.value.previewChannelUuid
                             ?: initialChannelUuid?.takeIf { uuid -> data.channels.any { it.uuid == uuid } }
@@ -93,25 +96,40 @@ class TvGuideViewModel : ViewModel() {
     }
 
     /**
-     * Builds the per-channel cell lists on [Dispatchers.Default], reusing the previous list
-     * instance for any channel whose event list is unchanged. That keeps both the CPU cost
-     * and the recomposition scope of a progressive emission proportional to what actually
-     * changed rather than to the size of the whole grid.
+     * The guide flow completes once all EPG chunks are fetched, so nothing would otherwise
+     * advance "now" as programmes end. Recompute now/next once a minute from the cached
+     * events — off the main thread — so the list stays current without composition doing it.
      */
-    private suspend fun buildCellsByChannel(
-        eventsByChannel: Map<String, List<EpgEvent>>,
-        windowStart: Long,
-        windowEnd: Long
-    ): Map<String, List<EpgCell>> = withContext(Dispatchers.Default) {
-        val prevEvents = lastEventsByChannel
-        val prevCells  = lastCellsByChannel
-        val out = HashMap<String, List<EpgCell>>(eventsByChannel.size)
+    private fun startClockTick() {
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000)
+                val events = lastEventsByChannel
+                if (events.isEmpty()) continue
+                _state.value = _state.value.copy(nowNextByChannel = buildNowNextByChannel(events))
+            }
+        }
+    }
+
+    /**
+     * Resolves the currently-airing programme and the following one for every channel on
+     * [Dispatchers.Default]. Events per channel are already in chronological order, so the
+     * live programme's successor is simply the next index. Results are value-equal to the
+     * previous pass for unchanged channels, so Compose skips those rows.
+     */
+    private suspend fun buildNowNextByChannel(
+        eventsByChannel: Map<String, List<EpgEvent>>
+    ): Map<String, NowNext> = withContext(Dispatchers.Default) {
+        val nowSecs = System.currentTimeMillis() / 1000L
+        val out = HashMap<String, NowNext>(eventsByChannel.size)
         for ((uuid, events) in eventsByChannel) {
-            val reusable = if (prevEvents[uuid] === events) prevCells[uuid] else null
-            out[uuid] = reusable ?: buildCells(events, windowStart, windowEnd)
+            val nowIdx = events.indexOfFirst { nowSecs in it.start..it.stop }
+            val now = events.getOrNull(nowIdx)
+            val next = if (nowIdx >= 0) events.getOrNull(nowIdx + 1)
+                       else events.firstOrNull { it.start > nowSecs }
+            out[uuid] = NowNext(now, next)
         }
         lastEventsByChannel = eventsByChannel
-        lastCellsByChannel = out
         out
     }
 
